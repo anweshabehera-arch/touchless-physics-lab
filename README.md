@@ -1,16 +1,40 @@
-# React + Vite
+# 🧪 Touchless Physics Lab
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+An interactive physics laboratory where students perform physics experiments using **hand gestures**, understand real-time physics concepts, interact with an **AI physics tutor**, and test their knowledge through quizzes.
 
-Currently, two official plugins are available:
+## 🚀 Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- 🖐️ Hand-gesture controlled physics experiments
+- ⚡ Real-time physics calculations and values
+- 🤖 Dr. Nova AI Physics Tutor
+- 🎤 Voice-based physics assistance
+- 📚 Experiment explanations and instructions
+- 📝 Interactive quizzes and scoring
+- 📊 Learning progress tracking
+- 🌌 Futuristic physics-lab interface
 
-## React Compiler
+## 🔬 Experiments
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Newton's Second Law
+- Collision & Momentum
+- Impulse
+- Hooke's Law
+- Projectile Motion
 
-## Expanding the ESLint configuration
+## 🛠️ Tech Stack
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- React
+- Vite
+- JavaScript
+- Three.js
+- MediaPipe Hand Tracking
+- Node.js
+- OpenAI API
+
+## ⚙️ Run Locally
+
+### Frontend
+
+```bash
+npm install
+npm run dev
