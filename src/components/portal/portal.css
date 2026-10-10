@@ -1099,8 +1099,63 @@ body:has(.portal-root),
   font-size: 1.5rem;
 }
 
-.tpl-achievements p { margin: 16px 0 0; font-size: 14px; font-weight: 500; }
+.tpl-achievements li.is-unlocked {
+  border-color: rgba(103, 232, 249, 0.4);
+  background: linear-gradient(180deg, rgba(103, 232, 249, 0.16), rgba(91, 156, 255, 0.05));
+  box-shadow: 0 4px 20px -4px rgba(103, 232, 249, 0.2);
+}
+
+.tpl-achievements li.is-locked {
+  opacity: 0.42;
+  border-color: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.tpl-badge-gem.is-active {
+  filter: drop-shadow(0 0 10px rgba(103, 232, 249, 0.5));
+  transform: scale(1.05);
+}
+
+.tpl-badge-gem.is-inactive {
+  filter: grayscale(1) opacity(0.5);
+}
+
+.tpl-lock-tag {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--tpl-muted);
+}
+
+.tpl-achievements p { margin: 12px 0 0; font-size: 14px; font-weight: 500; }
 .tpl-achievements small { margin-top: 4px; color: var(--tpl-muted); font-size: 11px; }
+
+.tpl-empty-activity {
+  padding: 36px 20px;
+  text-align: center;
+  color: var(--tpl-muted);
+  border-radius: 14px;
+  border: 1px dashed rgba(103, 232, 249, 0.18);
+  background: rgba(103, 232, 249, 0.02);
+}
+
+.tpl-empty-activity p {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tpl-fg);
+}
+
+.tpl-empty-activity span {
+  font-size: 12px;
+  color: var(--tpl-muted);
+}
 
 .tpl-dash-foot {
   padding: 24px 0 8px;

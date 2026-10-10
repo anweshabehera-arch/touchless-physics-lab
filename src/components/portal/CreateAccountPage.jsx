@@ -2,6 +2,7 @@ import { ArrowRight, Lock, Mail, ShieldCheck, Sparkles, User } from "lucide-reac
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { continueAsGuest, saveUser } from "../../auth/authStorage";
+import { initializeUserProgress } from "../../auth/experimentStorage";
 import AuthShell from "./AuthShell";
 import Field from "./Field";
 
@@ -27,7 +28,8 @@ export default function CreateAccountPage() {
     if (Object.keys(next).length) return;
 
     try {
-      saveUser({ name, email, password });
+      const user = saveUser({ name, email, password });
+      initializeUserProgress(user.email);
     } catch (err) {
       setErrors({ email: err.message || "Could not create account." });
       return;

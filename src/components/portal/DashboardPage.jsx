@@ -18,7 +18,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { clearSession, getDisplayName, getInitials, getSession } from "../../auth/authStorage";
 import { getExperimentStats } from "../../auth/experimentStorage";
@@ -26,12 +26,42 @@ import { EXPERIMENT_LIST } from "../../data/experimentsData";
 import LabBackground, { OrbitGlow } from "./LabBackground";
 import Logo from "./Logo";
 
-const ACHIEVEMENTS = [
-  { emoji: "🏆", title: "First Experiment", description: "Completed your first lab" },
-  { emoji: "🔬", title: "Physics Explorer", description: "Explored 25+ concepts" },
-  { emoji: "⚡", title: "Force Master", description: "Scored 90%+ on force" },
-  { emoji: "🚀", title: "Speed Learner", description: "3 labs in one day" },
-  { emoji: "🔥", title: "7 Day Streak", description: "Learned 7 days in a row" },
+const ACHIEVEMENTS_DEF = [
+  {
+    id: "first_lab",
+    emoji: "🏆",
+    title: "First Experiment",
+    description: "Completed your first lab",
+    isUnlocked: (s) => s.completedCount >= 1
+  },
+  {
+    id: "physics_explorer",
+    emoji: "🔬",
+    title: "Physics Explorer",
+    description: "Explored 8+ concepts",
+    isUnlocked: (s) => s.conceptsExplored >= 8
+  },
+  {
+    id: "force_master",
+    emoji: "⚡",
+    title: "Force Master",
+    description: "Scored 90%+ on a physics quiz",
+    isUnlocked: (s) => s.bestScore >= 90
+  },
+  {
+    id: "speed_learner",
+    emoji: "🚀",
+    title: "Speed Learner",
+    description: "Completed 3 or more labs",
+    isUnlocked: (s) => s.uniqueCompleted >= 3
+  },
+  {
+    id: "streak_scholar",
+    emoji: "🔥",
+    title: "7 Day Streak",
+    description: "Learned 7 days in a row",
+    isUnlocked: (s) => s.streak >= 7
+  },
 ];
 
 const NAV_ITEMS = [
@@ -77,18 +107,56 @@ function ProgressRing({ value }) {
 export default function DashboardPage() {
   const navigate = useNavigate();
   const session = getSession();
+  const userKey = session?.email || session?.id || "guest";
   const firstName = getDisplayName(session);
   const initials = getInitials(session);
   const [open, setOpen] = useState(false);
 
-  // Dynamic statistics from local experiment records
-  const stats = useMemo(() => getExperimentStats(), []);
+  // Dynamic statistics derived strictly from current user's isolated records
+  const [stats, setStats] = useState(() => getExperimentStats(userKey));
+
+  useEffect(() => {
+    const activeSession = getSession();
+    const activeKey = activeSession?.email || activeSession?.id || "guest";
+    setStats(getExperimentStats(activeKey));
+  }, [session?.email, session?.id]);
+
+  const evaluatedAchievements = useMemo(() => {
+    return ACHIEVEMENTS_DEF.map((ach) => ({
+      ...ach,
+      unlocked: ach.isUnlocked(stats)
+    }));
+  }, [stats]);
+
+  const unlockedCount = evaluatedAchievements.filter((a) => a.unlocked).length;
 
   const statCards = [
-    { label: "Labs Completed", value: `${stats.uniqueCompleted}/${stats.totalCount}`, icon: FlaskConical, delta: `${stats.overallProgress}% overall curriculum` },
-    { label: "Concepts Explored", value: `${stats.conceptsExplored}`, icon: Atom, delta: "+5 this week" },
-    { label: "Average Score", value: `${stats.averageScore}`, unit: "%", icon: Target, delta: `Best: ${stats.bestScore}%` },
-    { label: "Learning Streak", value: `${stats.streak}`, unit: "Days", icon: Flame, delta: "Personal best" },
+    {
+      label: "Labs Completed",
+      value: `${stats.uniqueCompleted}/${stats.totalCount}`,
+      icon: FlaskConical,
+      delta: stats.overallProgress > 0 ? `${stats.overallProgress}% overall curriculum` : "0% curriculum progress"
+    },
+    {
+      label: "Concepts Explored",
+      value: `${stats.conceptsExplored}`,
+      icon: Atom,
+      delta: stats.conceptsExplored > 0 ? `+${Math.min(5, stats.conceptsExplored)} this week` : "0 concepts explored"
+    },
+    {
+      label: "Average Score",
+      value: stats.completedCount > 0 ? `${stats.averageScore}` : "--",
+      unit: stats.completedCount > 0 ? "%" : "",
+      icon: Target,
+      delta: stats.bestScore > 0 ? `Best: ${stats.bestScore}%` : "Best: --"
+    },
+    {
+      label: "Learning Streak",
+      value: `${stats.streak}`,
+      unit: "Days",
+      icon: Flame,
+      delta: stats.streak > 0 ? "Personal best" : "0 day streak"
+    },
   ];
 
   const currentExperiment = EXPERIMENT_LIST[0]; // Newton's 2nd Law
@@ -355,54 +423,62 @@ export default function DashboardPage() {
             <h2>Recent Activity & Quiz Results</h2>
             <a href="#experiments">View all labs</a>
           </div>
-          <ul>
-            {stats.history.slice(0, 4).map((exp) => {
-              const done = exp.status === "completed";
-              return (
-                <li key={exp.id || exp.topic}>
-                  <button type="button" className="tpl-recent-row" onClick={() => startLab(exp.experimentId || 'newton')}>
-                    <div>
-                      <div className="tpl-recent-title">
-                        <p>{exp.experimentName || exp.title}</p>
-                        <span className={done ? "tpl-badge tpl-badge-ok" : "tpl-badge tpl-badge-warn"}>
-                          {done ? <CheckCircle2 className="tpl-icon-xs" /> : <Loader className="tpl-icon-xs" />}
-                          {done ? "Completed" : "In Progress"}
-                        </span>
+          {stats.history.length === 0 ? (
+            <div className="tpl-empty-activity">
+              <p>No recent experiment activity</p>
+              <span>Launch any laboratory above and complete the quiz to start recording your progress!</span>
+            </div>
+          ) : (
+            <ul>
+              {stats.history.slice(0, 4).map((exp) => {
+                const done = exp.status === "completed";
+                return (
+                  <li key={exp.id || exp.topic}>
+                    <button type="button" className="tpl-recent-row" onClick={() => startLab(exp.experimentId || 'newton')}>
+                      <div>
+                        <div className="tpl-recent-title">
+                          <p>{exp.experimentName || exp.title}</p>
+                          <span className={done ? "tpl-badge tpl-badge-ok" : "tpl-badge tpl-badge-warn"}>
+                            {done ? <CheckCircle2 className="tpl-icon-xs" /> : <Loader className="tpl-icon-xs" />}
+                            {done ? "Completed" : "In Progress"}
+                          </span>
+                        </div>
+                        <p className="tpl-recent-meta">
+                          {exp.topic} · {new Date(exp.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                        </p>
                       </div>
-                      <p className="tpl-recent-meta">
-                        {exp.topic} · {new Date(exp.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                      </p>
-                    </div>
-                    <div className={`tpl-mini-bar ${done ? "is-ok" : "is-warn"}`}>
-                      <div style={{ width: `${exp.score}%` }} />
-                    </div>
-                    <div className="tpl-recent-score">
-                      <strong>{exp.score}%</strong>
-                      <span>Score</span>
-                    </div>
-                    <ChevronRight aria-hidden="true" className="tpl-icon-sm tpl-chevron" />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+                      <div className={`tpl-mini-bar ${done ? "is-ok" : "is-warn"}`}>
+                        <div style={{ width: `${exp.score}%` }} />
+                      </div>
+                      <div className="tpl-recent-score">
+                        <strong>{exp.score}%</strong>
+                        <span>Score</span>
+                      </div>
+                      <ChevronRight aria-hidden="true" className="tpl-icon-sm tpl-chevron" />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </article>
 
         <article className="tpl-glass tpl-achievements tpl-rise" style={{ animationDelay: "560ms" }}>
           <div className="tpl-section-head">
             <h2>Achievements</h2>
             <span>
-              {ACHIEVEMENTS.length}/{ACHIEVEMENTS.length}
+              {unlockedCount}/{ACHIEVEMENTS_DEF.length}
             </span>
           </div>
           <ul>
-            {ACHIEVEMENTS.map((a) => (
-              <li key={a.title}>
-                <div className="tpl-badge-gem">
+            {evaluatedAchievements.map((a) => (
+              <li key={a.id} className={a.unlocked ? "is-unlocked" : "is-locked"}>
+                <div className={`tpl-badge-gem ${a.unlocked ? "is-active" : "is-inactive"}`}>
                   <span aria-hidden="true">{a.emoji}</span>
                 </div>
                 <p>{a.title}</p>
                 <small>{a.description}</small>
+                {!a.unlocked && <span className="tpl-lock-tag">Locked</span>}
               </li>
             ))}
           </ul>

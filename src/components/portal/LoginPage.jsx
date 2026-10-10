@@ -32,7 +32,7 @@ export default function LoginPage() {
     }
 
     setPending(true);
-    setSession({ guest: false, name: user.name, email: user.email }, remember);
+    setSession({ guest: false, id: user.id, name: user.name, email: user.email }, remember);
     navigate("/dashboard", { replace: true });
   };
 

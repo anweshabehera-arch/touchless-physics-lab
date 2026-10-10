@@ -4,7 +4,7 @@
  */
 
 const API_BASE = '/api';
-const DIRECT_BACKEND = 'http://localhost:5000/api';
+const DIRECT_BACKEND = 'https://touchless-physics-lab.onrender.com/api';
 
 /**
  * Universal fetch with fallback between Vite proxy and direct backend port
@@ -140,4 +140,5 @@ export async function explainQuizMistake(data) {
     body: JSON.stringify(data)
   });
 }
+
 
