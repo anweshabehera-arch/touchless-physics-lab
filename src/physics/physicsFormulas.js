@@ -495,10 +495,24 @@ export function computeInterferenceResultant(A1, A2, deltaPhaseRad) {
  * - Critical Angle (when n₁ > n₂): θ_c = arcsin(n₂ / n₁)
  * - Total Internal Reflection (TIR): when n₁ > n₂ and θ_i > θ_c
  */
-export function computeOpticsRays(thetaIncidentDeg, n1, n2) {
-  const thetaI = Math.max(0, Math.min(89.9, Number(thetaIncidentDeg) || 0));
-  const med1 = Math.max(1.0, Number(n1) || 1.0);
-  const med2 = Math.max(1.0, Number(n2) || 1.0);
+export function computeOpticsRays(thetaOrObj, n1Arg, n2Arg) {
+  let thetaIVal;
+  let n1Val;
+  let n2Val;
+
+  if (typeof thetaOrObj === 'object' && thetaOrObj !== null) {
+    thetaIVal = thetaOrObj.incidentAngleDeg ?? thetaOrObj.thetaIncidentDeg ?? 0;
+    n1Val = thetaOrObj.n1 ?? 1.0;
+    n2Val = thetaOrObj.n2 ?? 1.5;
+  } else {
+    thetaIVal = thetaOrObj;
+    n1Val = n1Arg ?? 1.0;
+    n2Val = n2Arg ?? 1.5;
+  }
+
+  const thetaI = Math.max(0, Math.min(89.9, Number(thetaIVal) || 0));
+  const med1 = Math.max(1.0, Number(n1Val) || 1.0);
+  const med2 = Math.max(1.0, Number(n2Val) || 1.0);
 
   const thetaIRad = (thetaI * Math.PI) / 180;
   const thetaReflectDeg = thetaI;
@@ -530,12 +544,16 @@ export function computeOpticsRays(thetaIncidentDeg, n1, n2) {
 
   return {
     thetaIncidentDeg: thetaI,
+    incidentAngleDeg: thetaI,
     thetaReflectDeg,
+    reflectionAngleDeg: thetaReflectDeg,
     thetaRefractDeg,
+    refractionAngleDeg: thetaRefractDeg,
     n1: med1,
     n2: med2,
     criticalAngleDeg,
     isTIR,
+    isTotalInternalReflection: isTIR,
     speedV1: 1.0 / med1, // Normalized speed of light in medium 1 (c = 1)
     speedV2: 1.0 / med2  // Normalized speed of light in medium 2 (c = 1)
   };

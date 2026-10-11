@@ -23,11 +23,22 @@ import PhysicsEventTimeline from "./components/HandForceLab/PhysicsEventTimeline
 import HowToPerformModal from "./components/HandForceLab/HowToPerformModal";
 import ExperimentQuizModal from "./components/HandForceLab/ExperimentQuizModal";
 import GuidedExperimentPanel from "./components/HandForceLab/GuidedExperimentPanel";
+import QuestModeBar from "./components/HandForceLab/QuestModeBar";
+import QuestMissionPanel from "./components/HandForceLab/QuestMissionPanel";
+import QuestPredictionPanel from "./components/HandForceLab/QuestPredictionPanel";
+import QuestCelebrationModal from "./components/HandForceLab/QuestCelebrationModal";
+import QuestRanksModal from "./components/HandForceLab/QuestRanksModal";
 import LabReportModal from "./components/HandForceLab/LabReportModal";
 import ProjectIntroModal from "./components/portal/ProjectIntroModal";
 import { EXPERIMENTS, EXPERIMENT_LIST } from "./data/experimentsData";
+import { QUEST_MISSIONS, QUEST_PREDICTIONS } from "./data/questMissionsData";
 import { getExperimentRecord } from "./auth/experimentStorage";
-import { getDisplayName, getSession } from "./auth/authStorage";
+import { getDisplayName, getSession, getCurrentUser } from "./auth/authStorage";
+import {
+  getQuestProfile,
+  completeQuestMission,
+  recordQuestPrediction
+} from "./auth/questStorage";
 import { evaluatePhysicsEvents } from "./services/physicsEventEngine";
 import {
   updatePendulumRK4,
@@ -64,6 +75,13 @@ export default function App() {
   const [isGuidedModeOpen, setIsGuidedModeOpen] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [isIntroOpen, setIsIntroOpen] = useState(false);
+
+  // Physics Quest State
+  const [questMode, setQuestMode] = useState("missions"); // 'learn' | 'missions' | 'prediction' | 'freeplay'
+  const [questProfile, setQuestProfile] = useState(() => getQuestProfile());
+  const [isRanksOpen, setIsRanksOpen] = useState(false);
+  const [celebrationData, setCelebrationData] = useState(null);
+  const [isCelebrationOpen, setIsCelebrationOpen] = useState(false);
   const [quizScoreBadge, setQuizScoreBadge] = useState(() => {
     const rec = getExperimentRecord(activeExpId);
     return rec ? rec.score : null;
@@ -450,11 +468,101 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activeExpId, physicsState.isAirborne]);
 
-  // Update quiz badge when quiz finishes
-  const handleQuizCompleted = (result) => {
+  // Handle Physics Quest Mission Completion & Claim
+  const handleClaimMission = useCallback((mission) => {
+    const user = getCurrentUser();
+    const userKey = user?.email || user?.id || null;
+    const prevLevel = questProfile.level;
+    const res = completeQuestMission(
+      activeExpId,
+      mission.id,
+      mission.xpReward,
+      { title: mission.title, tier: mission.tier },
+      userKey
+    );
+    if (!res.alreadyCompleted) {
+      setQuestProfile(res.profile);
+      const isLevelUp = res.profile.level > prevLevel;
+      const unlAch = res.profile.achievementsList?.find(
+        (a) => a.isUnlocked && !questProfile.achievements?.includes(a.id)
+      );
+      setCelebrationData({
+        title: `${mission.badge} ${mission.title}`,
+        subtitle: `Mission Completed in ${activeExperiment.title}!`,
+        xpAwarded: res.xpAwarded,
+        tier: mission.tier,
+        newLevel: isLevelUp ? res.profile.level : null,
+        levelTitle: isLevelUp ? res.profile.title : "",
+        unlockedAchievement: unlAch || null
+      });
+      setIsCelebrationOpen(true);
+    }
+  }, [activeExpId, activeExperiment.title, questProfile.achievements, questProfile.level]);
+
+  // Handle Scientific Hypothesis Prediction Submission
+  const handleRecordPrediction = useCallback((predId, selectedOpt, isCorrect) => {
+    const user = getCurrentUser();
+    const userKey = user?.email || user?.id || null;
+    const prevLevel = questProfile.level;
+    const xp = isCorrect ? 75 : 25;
+    const res = recordQuestPrediction(
+      activeExpId,
+      predId,
+      selectedOpt,
+      isCorrect,
+      xp,
+      userKey
+    );
+    setQuestProfile(res.profile);
+    const isLevelUp = res.profile.level > prevLevel;
+    const unlAch = res.profile.achievementsList?.find(
+      (a) => a.isUnlocked && !questProfile.achievements?.includes(a.id)
+    );
+    setCelebrationData({
+      title: isCorrect ? "Hypothesis Confirmed!" : "Hypothesis Tested!",
+      subtitle: isCorrect
+        ? "Your physical intuition aligns with empirical physics."
+        : "Science progresses through empirical testing and refutation.",
+      xpAwarded: res.xpAwarded,
+      tier: "prediction",
+      newLevel: isLevelUp ? res.profile.level : null,
+      levelTitle: isLevelUp ? res.profile.title : "",
+      unlockedAchievement: unlAch || null
+    });
+    setIsCelebrationOpen(true);
+  }, [activeExpId, questProfile.achievements, questProfile.level]);
+
+  // Update quiz badge and award Quiz Performance XP when quiz finishes
+  const handleQuizCompleted = useCallback((result) => {
     setQuizScoreBadge(result.score);
     setLastQuizResult(result);
-  };
+    if (result?.score >= 60) {
+      const user = getCurrentUser();
+      const userKey = user?.email || user?.id || null;
+      const prevLevel = questProfile.level;
+      const xpReward = result.score === 100 ? 120 : 60;
+      const res = completeQuestMission(
+        activeExpId,
+        `${activeExpId}_quiz_${result.score >= 100 ? "perfect" : "pass"}`,
+        xpReward,
+        { title: `Quiz Mastery (${result.score}%)`, tier: result.score === 100 ? "expert" : "intermediate" },
+        userKey
+      );
+      if (!res.alreadyCompleted) {
+        setQuestProfile(res.profile);
+        const isLevelUp = res.profile.level > prevLevel;
+        setCelebrationData({
+          title: `🎓 Quiz Mastery (${result.score}%)`,
+          subtitle: `Earned quiz performance XP in ${activeExperiment.title}!`,
+          xpAwarded: res.xpAwarded,
+          tier: "quiz",
+          newLevel: isLevelUp ? res.profile.level : null,
+          levelTitle: isLevelUp ? res.profile.title : ""
+        });
+        setIsCelebrationOpen(true);
+      }
+    }
+  }, [activeExpId, activeExperiment.title, questProfile.level]);
 
   // Main Three.js + MediaPipe Simulation Lifecycle
   useEffect(() => {
@@ -694,6 +802,7 @@ export default function App() {
       simState.incline.blockDist = 0.9;
       simState.incline.blockVelocity = 0;
     };
+    simControlsRef.current.getSimState = () => simState;
 
     const resetSimulation = (expId = activeExpIdRef.current) => {
       if (expId === "newton") {
@@ -2215,8 +2324,8 @@ export default function App() {
         // -----------------------------------------------------
         else if (currentExp === "optics") {
           const opt = simState.optics;
-
-          if (primaryHand && !effectiveFrozen) {
+          // Hand control: only update angle if user is actively pinching (aim gesture)
+          if (primaryHand && !effectiveFrozen && primaryHand.pinching) {
             const dx = primaryHand.x;
             const dy = primaryHand.y;
             if (dy > 0.05) {
@@ -3011,6 +3120,32 @@ export default function App() {
         </div>
       </header>
 
+      {/* QUEST MODE SWITCHER & CAREER STATUS BAR */}
+      <QuestModeBar
+        activeMode={questMode}
+        onChangeMode={(mode) => {
+          setQuestMode(mode);
+          if (mode === "learn") {
+            setIsGuidedModeOpen(true);
+          } else {
+            setIsGuidedModeOpen(false);
+          }
+        }}
+        questProfile={questProfile}
+        completedMissionsForExp={
+          (QUEST_MISSIONS[activeExpId] || []).filter((m) =>
+            Boolean(questProfile?.completedMissions?.[m.id])
+          ).length
+        }
+        totalMissionsForExp={3}
+        isPredictionDone={Boolean(
+          questProfile?.completedPredictions?.[
+            QUEST_PREDICTIONS[activeExpId]?.id
+          ]
+        )}
+        onOpenAchievements={() => setIsRanksOpen(true)}
+      />
+
       {/* 5. GESTURES HUD (LEFT) */}
       <div className="gesture-hud-panel" aria-label="Gestures Detected">
         <div className="panel-label">DETECTED GESTURE</div>
@@ -3075,8 +3210,8 @@ export default function App() {
         </div>
       </div>
 
-      {/* 6. GUIDED EXPERIMENT PANEL (OPTIONAL OVERLAY) */}
-      {isGuidedModeOpen && (
+      {/* 6. GUIDED / LEARN MODE PANEL */}
+      {(questMode === "learn" || isGuidedModeOpen) && (
         <GuidedExperimentPanel
           experiment={activeExperiment}
           physicsData={physicsState}
@@ -3090,7 +3225,41 @@ export default function App() {
               return next;
             });
           }}
-          onClose={() => setIsGuidedModeOpen(false)}
+          onClose={() => {
+            setIsGuidedModeOpen(false);
+            setQuestMode("freeplay");
+          }}
+        />
+      )}
+
+      {/* 6B. MISSION MODE PANEL */}
+      {questMode === "missions" && (
+        <QuestMissionPanel
+          experiment={activeExperiment}
+          missions={QUEST_MISSIONS[activeExpId] || []}
+          telemetry={physicsState}
+          physicsState={physicsState}
+          simState={physicsState}
+          onClaimReward={handleClaimMission}
+          completedMissionsMap={questProfile?.completedMissions || {}}
+          onResetSim={() => simControlsRef.current.resetSim?.(activeExpId)}
+          onClose={() => setQuestMode("freeplay")}
+        />
+      )}
+
+      {/* 6C. PREDICTION / HYPOTHESIS PANEL */}
+      {questMode === "prediction" && (
+        <QuestPredictionPanel
+          prediction={QUEST_PREDICTIONS[activeExpId]}
+          experiment={activeExperiment}
+          onRecordPrediction={handleRecordPrediction}
+          completedPrediction={
+            questProfile?.completedPredictions?.[
+              QUEST_PREDICTIONS[activeExpId]?.id
+            ]
+          }
+          onRunExperiment={() => setQuestMode("freeplay")}
+          onClose={() => setQuestMode("freeplay")}
         />
       )}
 
@@ -3275,6 +3444,20 @@ export default function App() {
         isOpen={isIntroOpen}
         onClose={() => setIsIntroOpen(false)}
         onLaunchLab={handleSelectExperiment}
+      />
+
+      {/* 18. QUEST CELEBRATION MODAL */}
+      <QuestCelebrationModal
+        isOpen={isCelebrationOpen}
+        onClose={() => setIsCelebrationOpen(false)}
+        celebrationData={celebrationData}
+      />
+
+      {/* 19. QUEST CAREER RANKS & ACHIEVEMENTS MODAL */}
+      <QuestRanksModal
+        isOpen={isRanksOpen}
+        onClose={() => setIsRanksOpen(false)}
+        questProfile={questProfile}
       />
     </div>
   );

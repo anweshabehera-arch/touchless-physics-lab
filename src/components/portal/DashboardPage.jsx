@@ -1,6 +1,5 @@
 import {
   ArrowRight,
-  Atom,
   Bot,
   CheckCircle2,
   ChevronRight,
@@ -19,11 +18,13 @@ import {
   X,
   Sparkles,
   FileText,
+  Award,
 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { clearSession, getDisplayName, getInitials, getSession } from "../../auth/authStorage";
 import { getExperimentStats } from "../../auth/experimentStorage";
+import { getQuestProfile, QUEST_ACHIEVEMENTS } from "../../auth/questStorage";
 import { EXPERIMENT_LIST } from "../../data/experimentsData";
 import LabBackground, { OrbitGlow } from "./LabBackground";
 import Logo from "./Logo";
@@ -225,28 +226,43 @@ export default function DashboardPage() {
     });
   };
 
-  const evaluatedAchievements = ACHIEVEMENTS_DEF.map((ach) => ({
-    ...ach,
-    unlocked: ach.isUnlocked(stats)
-  }));
+  const questProfile = getQuestProfile(userKey);
 
+  const allAchievementsList = [
+    ...ACHIEVEMENTS_DEF.map((ach) => ({
+      ...ach,
+      unlocked: ach.isUnlocked(stats) || Boolean(questProfile?.achievements?.includes(ach.id))
+    })),
+    ...QUEST_ACHIEVEMENTS.map((qAch) => ({
+      id: qAch.id,
+      emoji: qAch.icon,
+      title: qAch.title,
+      description: qAch.description,
+      unlocked: Boolean(questProfile?.achievements?.includes(qAch.id)) || qAch.check(questProfile)
+    }))
+  ];
+
+  const evaluatedAchievements = allAchievementsList.filter(
+    (a, idx, arr) => arr.findIndex((x) => x.id === a.id) === idx
+  );
   const unlockedCount = evaluatedAchievements.filter((a) => a.unlocked).length;
 
   const statCards = [
     {
-      label: "Labs Completed",
+      label: "Quest Career Rank",
+      value: `Lv. ${questProfile.level}`,
+      unit: questProfile.title,
+      icon: Award,
+      delta: `${questProfile.currentXP} XP · ${questProfile.totalMissionsCompleted}/30 Missions`
+    },
+    {
+      label: "Labs Mastered",
       value: `${stats.uniqueCompleted}/${stats.totalCount}`,
       icon: FlaskConical,
       delta: stats.overallProgress > 0 ? `${stats.overallProgress}% overall curriculum` : "0% curriculum progress"
     },
     {
-      label: "Concepts Explored",
-      value: `${stats.conceptsExplored}`,
-      icon: Atom,
-      delta: stats.conceptsExplored > 0 ? `+${Math.min(5, stats.conceptsExplored)} this week` : "0 concepts explored"
-    },
-    {
-      label: "Average Score",
+      label: "Average Quiz Score",
       value: stats.completedCount > 0 ? `${stats.averageScore}` : "--",
       unit: stats.completedCount > 0 ? "%" : "",
       icon: Target,
@@ -254,10 +270,10 @@ export default function DashboardPage() {
     },
     {
       label: "Learning Streak",
-      value: `${stats.streak}`,
+      value: `${Math.max(stats.streak, questProfile.streak)}`,
       unit: "Days",
       icon: Flame,
-      delta: stats.streak > 0 ? "Personal best" : "0 day streak"
+      delta: `${questProfile.totalPredictionsCompleted}/10 Hypotheses verified`
     },
   ];
 
@@ -436,6 +452,7 @@ export default function DashboardPage() {
               const record = stats.history.find(h => h.experimentId === exp.id && h.status === 'completed');
               const inProg = stats.history.find(h => h.experimentId === exp.id && h.status === 'in-progress');
               const isCompleted = Boolean(record);
+              const missionsDone = Object.values(questProfile.completedMissions || {}).filter((m) => m.expId === exp.id).length;
 
               return (
                 <div key={exp.id} className="tpl-glass tpl-lab-card">
@@ -460,9 +477,20 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="tpl-lab-card-foot">
-                    <span className="tpl-lab-score-pill">
-                      {record ? `Score: ${record.score}%` : `Topic: ${exp.shortTitle}`}
-                    </span>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span className="tpl-lab-score-pill">
+                        {record ? `Score: ${record.score}%` : `Topic: ${exp.shortTitle}`}
+                      </span>
+                      <span
+                        className="tpl-lab-score-pill"
+                        style={{
+                          color: missionsDone === 3 ? '#31f2a1' : '#38d9ff',
+                          borderColor: missionsDone === 3 ? 'rgba(49, 242, 161, 0.3)' : 'rgba(56, 217, 255, 0.3)'
+                        }}
+                      >
+                        🎯 Quest: {missionsDone}/3
+                      </span>
+                    </div>
                     <div style={{ display: 'flex', gap: '6px' }}>
                       {isCompleted && (
                         <button

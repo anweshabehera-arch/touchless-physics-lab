@@ -221,6 +221,10 @@ export function getCurrentUserKey() {
   return session.email ? session.email.trim().toLowerCase() : (session.id || "guest");
 }
 
+export function getCurrentUser() {
+  return getSession();
+}
+
 /**
  * End session without wiping registered accounts from the database.
  */
