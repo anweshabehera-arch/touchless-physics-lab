@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 /**
  * VoiceControls Component
@@ -12,9 +12,18 @@ export default function VoiceControls({
 }) {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [speechSupported, setSpeechSupported] = useState(true);
-  const [ttsSupported, setTtsSupported] = useState(true);
-  const [voiceStatus, setVoiceStatus] = useState('');
+  const [speechSupported, setSpeechSupported] = useState(() => {
+    return typeof window !== 'undefined' && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+  });
+  const [ttsSupported] = useState(() => {
+    return typeof window !== 'undefined' && 'speechSynthesis' in window;
+  });
+  const [voiceStatus, setVoiceStatus] = useState(() => {
+    if (typeof window !== 'undefined' && !(window.SpeechRecognition || window.webkitSpeechRecognition)) {
+      return 'Speech recognition is not supported in this browser.';
+    }
+    return '';
+  });
 
   const recognitionRef = useRef(null);
   const onTranscriptRef = useRef(onTranscript);
@@ -30,10 +39,6 @@ export default function VoiceControls({
       window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      setSpeechSupported(false);
-      setVoiceStatus(
-        'Speech recognition is not supported in this browser.'
-      );
       return;
     }
 
@@ -128,15 +133,10 @@ export default function VoiceControls({
         err
       );
 
-      setSpeechSupported(false);
-      setVoiceStatus(
-        'Could not initialize speech recognition.'
-      );
-    }
-
-    // Check Text-to-Speech support
-    if (!('speechSynthesis' in window)) {
-      setTtsSupported(false);
+      setTimeout(() => {
+        setSpeechSupported(false);
+        setVoiceStatus('Could not initialize speech recognition.');
+      }, 0);
     }
 
     return () => {
@@ -147,7 +147,9 @@ export default function VoiceControls({
           recognitionRef.current.onerror = null;
           recognitionRef.current.onend = null;
           recognitionRef.current.abort();
-        } catch (_) {}
+        } catch {
+          // ignore abort cleanup error
+        }
       }
 
       if ('speechSynthesis' in window) {
@@ -176,7 +178,9 @@ export default function VoiceControls({
     if (isListening) {
       try {
         recognition.stop();
-      } catch (_) {}
+      } catch {
+        // ignore stop error
+      }
 
       setIsListening(false);
       setVoiceStatus('Listening stopped.');
@@ -202,7 +206,9 @@ export default function VoiceControls({
       // reset it and try once more.
       try {
         recognition.abort();
-      } catch (_) {}
+      } catch {
+        // ignore abort retry
+      }
 
       setTimeout(() => {
         try {

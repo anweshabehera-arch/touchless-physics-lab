@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { CheckCircle2, XCircle, ArrowRight, RotateCcw, Award, Sparkles, Bot, Loader2 } from 'lucide-react';
 import { saveExperimentResult } from '../../auth/experimentStorage';
 import { explainQuizMistake } from '../../services/physicsAI';
@@ -48,7 +48,7 @@ export default function ExperimentQuizModal({
         experimentName: experiment.title
       });
       setAiExplanation(res.tutoringExplanation);
-    } catch (err) {
+    } catch {
       setAiExplanation("Dr. Nova tip: Re-read the physical formula and units. Keep experimenting in the lab to test the relationship!");
     } finally {
       setAiExplaining(false);

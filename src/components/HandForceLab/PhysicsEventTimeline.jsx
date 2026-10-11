@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { RotateCcw, Play, Pause, FileText } from 'lucide-react';
 
 export default function PhysicsEventTimeline({

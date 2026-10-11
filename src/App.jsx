@@ -29,6 +29,14 @@ import { EXPERIMENTS, EXPERIMENT_LIST } from "./data/experimentsData";
 import { getExperimentRecord } from "./auth/experimentStorage";
 import { getDisplayName, getSession } from "./auth/authStorage";
 import { evaluatePhysicsEvents } from "./services/physicsEventEngine";
+import {
+  updatePendulumRK4,
+  computePendulumSmallAnglePeriod,
+  computeElectricFieldVector,
+  computeElectricPotential,
+  computeOpticsRays,
+  updateInclinedPlaneMotion
+} from "./physics/physicsFormulas";
 
 export default function App() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -79,6 +87,33 @@ export default function App() {
   const [showInvisible, setShowInvisible] = useState(true);
   const [explainVoice, setExplainVoice] = useState(false);
 
+  // Experiment 6: Simple Pendulum
+  const [pendulumLength, setPendulumLength] = useState(1.5); // m
+  const [pendulumAngle, setPendulumAngle] = useState(30); // deg
+  const [pendulumMass, setPendulumMass] = useState(0.8); // kg
+
+  // Experiment 7: Electric Field & Charges
+  const [charge1Q, setCharge1Q] = useState(2.0); // μC
+  const [charge2Q, setCharge2Q] = useState(-2.0); // μC
+  const [chargeTestQ, setChargeTestQ] = useState(1.0); // μC
+
+  // Experiment 8: Wave Interference
+  const [waveA1, setWaveA1] = useState(1.0); // m
+  const [waveA2, setWaveA2] = useState(1.0); // m
+  const [wavePhaseDeg, setWavePhaseDeg] = useState(0); // deg
+  const [waveFreq, setWaveFreq] = useState(1.0); // Hz
+
+  // Experiment 9: Reflection & Refraction
+  const [opticsIncidentAngle, setOpticsIncidentAngle] = useState(45); // deg
+  const [opticsN1, setOpticsN1] = useState(1.0);
+  const [opticsN2, setOpticsN2] = useState(1.5);
+
+  // Experiment 10: Friction & Inclined Plane
+  const [inclineAngle, setInclineAngle] = useState(25); // deg
+  const [inclineMass, setInclineMass] = useState(1.0); // kg
+  const [inclineMuStatic, setInclineMuStatic] = useState(0.45);
+  const [inclineMuKinetic, setInclineMuKinetic] = useState(0.30);
+
   // Live HUD & Action Chain State
   const [physicsState, setPhysicsState] = useState({
     force: 0,
@@ -91,6 +126,7 @@ export default function App() {
     momentum: 0,
     kineticEnergy: 0,
     interactionRadius: 0.55,
+    hasInteracted: false,
     // Impulse-specific
     peakForce: 0,
     contactTime: 0,
@@ -114,7 +150,42 @@ export default function App() {
     range: 0,
     maxHeight: 0,
     flightTime: 0,
-    isAirborne: false
+    isAirborne: false,
+    // 6. Pendulum-specific
+    thetaDeg: 30,
+    pendulumLength: 1.5,
+    pendulumMass: 0.8,
+    pendulumPeriodTheo: 2.46,
+    pendulumOmega: 0,
+    // 7. Electric-specific
+    charge1Q: 2.0,
+    charge2Q: -2.0,
+    chargeTestQ: 1.0,
+    electricFieldMag: 0,
+    electricPotential: 0,
+    // 8. Wave-specific
+    waveA1: 1.0,
+    waveA2: 1.0,
+    wavePhaseDeg: 0,
+    waveFreq: 1.0,
+    waveResultantAmp: 2.0,
+    waveRegime: 'constructive',
+    // 9. Optics-specific
+    opticsIncidentAngle: 45,
+    opticsN1: 1.0,
+    opticsN2: 1.5,
+    opticsRefractAngle: 28.1,
+    isTIR: false,
+    // 10. Incline-specific
+    inclineAngle: 25,
+    inclineMass: 1.0,
+    inclineMuStatic: 0.45,
+    inclineMuKinetic: 0.30,
+    inclineNormalForce: 8.88,
+    inclineFrictionForce: 2.66,
+    inclineNetForce: 1.48,
+    inclineAccel: 1.48,
+    inclineIsSlipping: true
   });
 
   const [activeGesture, setActiveGesture] = useState("NONE");
@@ -165,8 +236,41 @@ export default function App() {
     setIsPausedRef: null,
     setShowVectorsRef: null,
     setShowInvisibleRef: null,
-    setVoiceRef: null
   });
+
+  // Settings Ref to provide current dynamic settings to the simulation loop without recreating the Three.js lifecycle
+  const settingsRef = useRef({
+    appliedForceManual,
+    cameraEnabled,
+    collisionType,
+    explainVoice,
+    mass,
+    pendulumAngle,
+    showInvisible,
+    showVectors
+  });
+
+  useEffect(() => {
+    settingsRef.current = {
+      appliedForceManual,
+      cameraEnabled,
+      collisionType,
+      explainVoice,
+      mass,
+      pendulumAngle,
+      showInvisible,
+      showVectors
+    };
+  }, [
+    appliedForceManual,
+    cameraEnabled,
+    collisionType,
+    explainVoice,
+    mass,
+    pendulumAngle,
+    showInvisible,
+    showVectors
+  ]);
 
   // Safe snapshot getter for Dr. Nova AI
   const getLabSnapshot = useCallback(() => {
@@ -243,6 +347,75 @@ export default function App() {
   useEffect(() => {
     simControlsRef.current.setVoiceRef?.(explainVoice);
   }, [explainVoice]);
+
+  // Sync Experiments 6-10 settings into simulation
+  useEffect(() => {
+    simControlsRef.current.setPendulumLengthRef?.(pendulumLength);
+  }, [pendulumLength]);
+
+  useEffect(() => {
+    simControlsRef.current.setPendulumAngleRef?.(pendulumAngle);
+  }, [pendulumAngle]);
+
+  useEffect(() => {
+    simControlsRef.current.setPendulumMassRef?.(pendulumMass);
+  }, [pendulumMass]);
+
+  useEffect(() => {
+    simControlsRef.current.setCharge1QRef?.(charge1Q);
+  }, [charge1Q]);
+
+  useEffect(() => {
+    simControlsRef.current.setCharge2QRef?.(charge2Q);
+  }, [charge2Q]);
+
+  useEffect(() => {
+    simControlsRef.current.setChargeTestQRef?.(chargeTestQ);
+  }, [chargeTestQ]);
+
+  useEffect(() => {
+    simControlsRef.current.setWaveA1Ref?.(waveA1);
+  }, [waveA1]);
+
+  useEffect(() => {
+    simControlsRef.current.setWaveA2Ref?.(waveA2);
+  }, [waveA2]);
+
+  useEffect(() => {
+    simControlsRef.current.setWavePhaseDegRef?.(wavePhaseDeg);
+  }, [wavePhaseDeg]);
+
+  useEffect(() => {
+    simControlsRef.current.setWaveFreqRef?.(waveFreq);
+  }, [waveFreq]);
+
+  useEffect(() => {
+    simControlsRef.current.setOpticsIncidentAngleRef?.(opticsIncidentAngle);
+  }, [opticsIncidentAngle]);
+
+  useEffect(() => {
+    simControlsRef.current.setOpticsN1Ref?.(opticsN1);
+  }, [opticsN1]);
+
+  useEffect(() => {
+    simControlsRef.current.setOpticsN2Ref?.(opticsN2);
+  }, [opticsN2]);
+
+  useEffect(() => {
+    simControlsRef.current.setInclineAngleRef?.(inclineAngle);
+  }, [inclineAngle]);
+
+  useEffect(() => {
+    simControlsRef.current.setInclineMassRef?.(inclineMass);
+  }, [inclineMass]);
+
+  useEffect(() => {
+    simControlsRef.current.setInclineMuStaticRef?.(inclineMuStatic);
+  }, [inclineMuStatic]);
+
+  useEffect(() => {
+    simControlsRef.current.setInclineMuKineticRef?.(inclineMuKinetic);
+  }, [inclineMuKinetic]);
 
   // Keyboard Shortcuts (Space: Pause/Fire, R: Reset, G: Guided, V: Vectors)
   useEffect(() => {
@@ -351,16 +524,63 @@ export default function App() {
         range: 0,
         maxHeight: 0,
         gravity: 9.8
+      },
+      // 6. Simple Pendulum
+      pendulum: {
+        pivotX: 0,
+        pivotY: 0.65,
+        length: 1.5,
+        mass: 0.8,
+        theta: (30 * Math.PI) / 180,
+        omega: 0,
+        alpha: 0,
+        gravity: 9.8,
+        damping: 0.05,
+        isGrabbed: false
+      },
+      // 7. Electric Field & Charges
+      electric: {
+        charges: [
+          { id: 'q1', x: -0.45, y: 0, q: 2.0, radius: 0.06 },
+          { id: 'q2', x: 0.45, y: 0, q: -2.0, radius: 0.06 }
+        ],
+        probe: { x: 0, y: 0.35, q: 1.0, vx: 0, vy: 0, radius: 0.045 },
+        isProbeGrabbed: false
+      },
+      // 8. Wave Interference
+      wave: {
+        a1: 1.0,
+        a2: 1.0,
+        freq: 1.0,
+        phaseDeg: 0,
+        phaseRad: 0
+      },
+      // 9. Reflection & Refraction (Optics)
+      optics: {
+        incidentAngleDeg: 45,
+        n1: 1.0,
+        n2: 1.5
+      },
+      // 10. Friction & Inclined Plane
+      incline: {
+        angleDeg: 25,
+        mass: 1.0,
+        muStatic: 0.45,
+        muKinetic: 0.30,
+        blockDist: 0.9,
+        blockVelocity: 0,
+        isSlipping: false,
+        gravity: 9.8
       }
     };
 
     let simPaused = false;
-    let currentShowVectors = showVectors;
-    let currentShowInvisible = showInvisible;
-    let currentVoiceEnabled = explainVoice;
-    let currentAppliedForce = appliedForceManual;
-    let currentCollisionType = collisionType;
-    let isWebcamEnabled = cameraEnabled;
+    let currentShowVectors = settingsRef.current.showVectors;
+    let currentShowInvisible = settingsRef.current.showInvisible;
+    let currentVoiceEnabled = settingsRef.current.explainVoice;
+    let currentAppliedForce = settingsRef.current.appliedForceManual;
+    let currentCollisionType = settingsRef.current.collisionType;
+    let isWebcamEnabled = settingsRef.current.cameraEnabled;
     let totalSimTime = 0;
 
     // Expose control handlers
@@ -401,6 +621,80 @@ export default function App() {
       currentVoiceEnabled = voc;
     };
 
+    // Setters for Experiments 6-10
+    simControlsRef.current.setPendulumLengthRef = (l) => {
+      simState.pendulum.length = l;
+    };
+    simControlsRef.current.setPendulumAngleRef = (ang) => {
+      simState.pendulum.theta = (ang * Math.PI) / 180;
+      simState.pendulum.omega = 0;
+    };
+    simControlsRef.current.setPendulumMassRef = (m) => {
+      simState.pendulum.mass = m;
+    };
+    simControlsRef.current.setCharge1QRef = (q) => {
+      simState.electric.charges[0].q = q;
+    };
+    simControlsRef.current.setCharge2QRef = (q) => {
+      simState.electric.charges[1].q = q;
+    };
+    simControlsRef.current.setChargeTestQRef = (q) => {
+      simState.electric.probe.q = q;
+    };
+    simControlsRef.current.resetCharges = () => {
+      simState.electric.charges[0].x = -0.45;
+      simState.electric.charges[0].y = 0;
+      simState.electric.charges[1].x = 0.45;
+      simState.electric.charges[1].y = 0;
+      simState.electric.probe.x = 0;
+      simState.electric.probe.y = 0.35;
+    };
+    simControlsRef.current.setWaveA1Ref = (a) => {
+      simState.wave.a1 = a;
+    };
+    simControlsRef.current.setWaveA2Ref = (a) => {
+      simState.wave.a2 = a;
+    };
+    simControlsRef.current.setWavePhaseDegRef = (p) => {
+      simState.wave.phaseDeg = p;
+      simState.wave.phaseRad = (p * Math.PI) / 180;
+    };
+    simControlsRef.current.setWaveFreqRef = (f) => {
+      simState.wave.freq = f;
+    };
+    simControlsRef.current.setOpticsIncidentAngleRef = (ang) => {
+      simState.optics.incidentAngleDeg = ang;
+    };
+    simControlsRef.current.setOpticsN1Ref = (n) => {
+      simState.optics.n1 = n;
+    };
+    simControlsRef.current.setOpticsN2Ref = (n) => {
+      simState.optics.n2 = n;
+    };
+    simControlsRef.current.swapOpticsMedia = () => {
+      const prevN1 = simState.optics.n1;
+      simState.optics.n1 = simState.optics.n2;
+      simState.optics.n2 = prevN1;
+      setOpticsN1(simState.optics.n1);
+      setOpticsN2(simState.optics.n2);
+    };
+    simControlsRef.current.setInclineAngleRef = (ang) => {
+      simState.incline.angleDeg = ang;
+    };
+    simControlsRef.current.setInclineMassRef = (m) => {
+      simState.incline.mass = m;
+    };
+    simControlsRef.current.setInclineMuStaticRef = (s) => {
+      simState.incline.muStatic = s;
+    };
+    simControlsRef.current.setInclineMuKineticRef = (k) => {
+      simState.incline.muKinetic = k;
+    };
+    simControlsRef.current.resetInclineBlock = () => {
+      simState.incline.blockDist = 0.9;
+      simState.incline.blockVelocity = 0;
+    };
+
     const resetSimulation = (expId = activeExpIdRef.current) => {
       if (expId === "newton") {
         simState.newton.x = 0;
@@ -439,6 +733,20 @@ export default function App() {
         simState.projectile.vx = 0;
         simState.projectile.vy = 0;
         simState.projectile.flightTime = 0;
+      } else if (expId === "pendulum") {
+        simState.pendulum.theta = (settingsRef.current.pendulumAngle * Math.PI) / 180;
+        simState.pendulum.omega = 0;
+        simState.pendulum.alpha = 0;
+      } else if (expId === "electric") {
+        simControlsRef.current.resetCharges?.();
+      } else if (expId === "wave") {
+        simState.wave.phaseDeg = 0;
+        simState.wave.phaseRad = 0;
+      } else if (expId === "optics") {
+        simState.optics.incidentAngleDeg = 45;
+      } else if (expId === "incline") {
+        simState.incline.blockDist = 0.9;
+        simState.incline.blockVelocity = 0;
       }
     };
 
@@ -686,6 +994,289 @@ export default function App() {
       projectileGroup.add(projectileBall.group);
       scene.add(projectileGroup);
 
+      // --- Group 6: Simple Pendulum ---
+      const pendulumGroup = new THREE.Group();
+      const pivotMount = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.02, 0.02, 0.18, 16),
+        new THREE.MeshBasicMaterial({ color: 0x38d9ff })
+      );
+      pivotMount.position.set(0, 0.65, 0);
+      pivotMount.rotation.z = Math.PI / 2;
+      pendulumGroup.add(pivotMount);
+
+      // Equilibrium dashed line (theta = 0)
+      const eqLineGeom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0.65, 0),
+        new THREE.Vector3(0, -0.65, 0)
+      ]);
+      const eqLine = new THREE.Line(
+        eqLineGeom,
+        new THREE.LineDashedMaterial({
+          color: 0x38d9ff,
+          dashSize: 0.04,
+          gapSize: 0.03,
+          transparent: true,
+          opacity: 0.35
+        })
+      );
+      eqLine.computeLineDistances();
+      pendulumGroup.add(eqLine);
+
+      // Pendulum String / Rod
+      const rodGeom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0.65, 0),
+        new THREE.Vector3(0, 0, 0)
+      ]);
+      const pendulumRod = new THREE.Line(
+        rodGeom,
+        new THREE.LineBasicMaterial({ color: 0x38d9ff, linewidth: 2 })
+      );
+      pendulumGroup.add(pendulumRod);
+
+      // Bob sphere
+      const pendulumBob = createGlowSphere(0.075, 0x00f0ff);
+      pendulumGroup.add(pendulumBob.group);
+
+      // Angle indicator arc
+      const ARC_PTS = 24;
+      const arcPositions = new Float32Array(ARC_PTS * 3);
+      const arcGeometry = new THREE.BufferGeometry();
+      arcGeometry.setAttribute("position", new THREE.BufferAttribute(arcPositions, 3));
+      const pendulumArc = new THREE.Line(
+        arcGeometry,
+        new THREE.LineBasicMaterial({ color: 0xffbb33, transparent: true, opacity: 0.6 })
+      );
+      pendulumGroup.add(pendulumArc);
+      scene.add(pendulumGroup);
+
+      // --- Group 7: Electric Field & Charges ---
+      const electricGroup = new THREE.Group();
+      const charge1Mesh = createGlowSphere(0.07, 0xff3b69); // Q1 Positive (Pink/Red)
+      const charge2Mesh = createGlowSphere(0.07, 0x38d9ff); // Q2 Negative (Cyan)
+      const probeMesh = createGlowSphere(0.045, 0xffbb33);  // Test Probe (Amber)
+      electricGroup.add(charge1Mesh.group);
+      electricGroup.add(charge2Mesh.group);
+      electricGroup.add(probeMesh.group);
+
+      // Equipotential contour rings around charge 1 and 2
+      const makeEquiRing = (rad, colorHex) => {
+        return new THREE.Mesh(
+          new THREE.RingGeometry(rad - 0.005, rad, 48),
+          new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 0.22, side: THREE.DoubleSide })
+        );
+      };
+      const eqRingsQ1 = [makeEquiRing(0.16, 0xff3b69), makeEquiRing(0.32, 0xff3b69)];
+      const eqRingsQ2 = [makeEquiRing(0.16, 0x38d9ff), makeEquiRing(0.32, 0x38d9ff)];
+      eqRingsQ1.forEach(r => charge1Mesh.group.add(r));
+      eqRingsQ2.forEach(r => charge2Mesh.group.add(r));
+
+      // Grid of electric field direction needles (7 cols x 5 rows = 35 vectors)
+      const FIELD_COLS = 7;
+      const FIELD_ROWS = 5;
+      const fieldArrows = [];
+      for (let r = 0; r < FIELD_ROWS; r++) {
+        for (let c = 0; c < FIELD_COLS; c++) {
+          const gx = ((c / (FIELD_COLS - 1)) - 0.5) * (aspect * 1.6);
+          const gy = ((r / (FIELD_ROWS - 1)) - 0.5) * 1.4;
+          const arrow = new THREE.ArrowHelper(
+            new THREE.Vector3(1, 0, 0),
+            new THREE.Vector3(gx, gy, 0),
+            0.05,
+            0x29b6f6,
+            0.035,
+            0.02
+          );
+          arrow.userData = { origX: gx, origY: gy };
+          fieldArrows.push(arrow);
+          electricGroup.add(arrow);
+        }
+      }
+      scene.add(electricGroup);
+
+      // --- Group 8: Wave Interference (Superposition) ---
+      const waveGroup = new THREE.Group();
+      const WAVE_POINTS = 80;
+
+      // Baseline reference (y = 0)
+      const waveBaseGeom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-aspect, 0, 0),
+        new THREE.Vector3(aspect, 0, 0)
+      ]);
+      const waveBaseLine = new THREE.Line(
+        waveBaseGeom,
+        new THREE.LineBasicMaterial({ color: 0x167cff, transparent: true, opacity: 0.3 })
+      );
+      waveGroup.add(waveBaseLine);
+
+      // Wave 1 ribbon (Cyan)
+      const wave1Positions = new Float32Array(WAVE_POINTS * 3);
+      const wave1Geometry = new THREE.BufferGeometry();
+      wave1Geometry.setAttribute("position", new THREE.BufferAttribute(wave1Positions, 3));
+      const wave1Line = new THREE.Line(
+        wave1Geometry,
+        new THREE.LineBasicMaterial({ color: 0x38d9ff, transparent: true, opacity: 0.7 })
+      );
+      waveGroup.add(wave1Line);
+
+      // Wave 2 ribbon (Magenta)
+      const wave2Positions = new Float32Array(WAVE_POINTS * 3);
+      const wave2Geometry = new THREE.BufferGeometry();
+      wave2Geometry.setAttribute("position", new THREE.BufferAttribute(wave2Positions, 3));
+      const wave2Line = new THREE.Line(
+        wave2Geometry,
+        new THREE.LineBasicMaterial({ color: 0xe040fb, transparent: true, opacity: 0.7 })
+      );
+      waveGroup.add(wave2Line);
+
+      // Resultant Superposition wave (Golden Yellow glowing)
+      const waveResPositions = new Float32Array(WAVE_POINTS * 3);
+      const waveResGeometry = new THREE.BufferGeometry();
+      waveResGeometry.setAttribute("position", new THREE.BufferAttribute(waveResPositions, 3));
+      const waveResLine = new THREE.Line(
+        waveResGeometry,
+        new THREE.LineBasicMaterial({
+          color: 0xffbb33,
+          linewidth: 3,
+          blending: THREE.AdditiveBlending
+        })
+      );
+      waveGroup.add(waveResLine);
+      scene.add(waveGroup);
+
+      // --- Group 9: Reflection & Refraction (Optics) ---
+      const opticsGroup = new THREE.Group();
+
+      // Optical interface line at y = 0
+      const interfaceGeom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-aspect, 0, 0),
+        new THREE.Vector3(aspect, 0, 0)
+      ]);
+      const interfaceLine = new THREE.Line(
+        interfaceGeom,
+        new THREE.LineBasicMaterial({ color: 0x38d9ff, linewidth: 2 })
+      );
+      opticsGroup.add(interfaceLine);
+
+      // Medium 2 lower backdrop
+      const med2Plane = new THREE.Mesh(
+        new THREE.PlaneGeometry(aspect * 2, 1.2),
+        new THREE.MeshBasicMaterial({ color: 0x0d3b66, transparent: true, opacity: 0.35 })
+      );
+      med2Plane.position.set(0, -0.6, -0.05);
+      opticsGroup.add(med2Plane);
+
+      // Normal reference line (dashed vertical at x = 0)
+      const normalGeom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0.8, 0),
+        new THREE.Vector3(0, -0.8, 0)
+      ]);
+      const normalLine = new THREE.Line(
+        normalGeom,
+        new THREE.LineDashedMaterial({
+          color: 0xffffff,
+          dashSize: 0.04,
+          gapSize: 0.03,
+          transparent: true,
+          opacity: 0.5
+        })
+      );
+      normalLine.computeLineDistances();
+      opticsGroup.add(normalLine);
+
+      // Laser emitter head
+      const laserEmitter = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, 0.06, 0.04),
+        new THREE.MeshBasicMaterial({ color: 0x31f2a1 })
+      );
+      opticsGroup.add(laserEmitter);
+
+      // Incident ray (Emitter -> (0,0))
+      const incRayGeom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-0.6, 0.6, 0),
+        new THREE.Vector3(0, 0, 0)
+      ]);
+      const incRayLine = new THREE.Line(
+        incRayGeom,
+        new THREE.LineBasicMaterial({ color: 0x31f2a1, linewidth: 2 })
+      );
+      opticsGroup.add(incRayLine);
+
+      // Reflected ray ((0,0) -> surface upper right)
+      const reflRayGeom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0.6, 0.6, 0)
+      ]);
+      const reflRayLine = new THREE.Line(
+        reflRayGeom,
+        new THREE.LineBasicMaterial({ color: 0x31f2a1, transparent: true, opacity: 0.7 })
+      );
+      opticsGroup.add(reflRayLine);
+
+      // Refracted ray ((0,0) -> medium 2 lower right)
+      const refrRayGeom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0.4, -0.7, 0)
+      ]);
+      const refrRayLine = new THREE.Line(
+        refrRayGeom,
+        new THREE.LineBasicMaterial({ color: 0x38d9ff, linewidth: 2 })
+      );
+      opticsGroup.add(refrRayLine);
+      scene.add(opticsGroup);
+
+      // --- Group 10: Friction & Inclined Plane ---
+      const inclineGroup = new THREE.Group();
+
+      // Ramp triangular wedge line
+      const rampGeom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-0.85, -0.55, 0),
+        new THREE.Vector3(0.55, -0.55, 0),
+        new THREE.Vector3(0.55, 0.15, 0),
+        new THREE.Vector3(-0.85, -0.55, 0)
+      ]);
+      const rampMesh = new THREE.Line(
+        rampGeom,
+        new THREE.LineBasicMaterial({ color: 0x38d9ff, linewidth: 2 })
+      );
+      inclineGroup.add(rampMesh);
+
+      // Sliding block
+      const blockMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.14, 0.08, 0.06),
+        new THREE.MeshBasicMaterial({ color: 0xffbb33 })
+      );
+      inclineGroup.add(blockMesh);
+
+      // Ramp Force Vectors
+      const inclineWeightArrow = new THREE.ArrowHelper(
+        new THREE.Vector3(0, -1, 0),
+        new THREE.Vector3(0, 0, 0),
+        0.25,
+        0xffdd55,
+        0.05,
+        0.03
+      );
+      const inclineNormalArrow = new THREE.ArrowHelper(
+        new THREE.Vector3(0, 1, 0),
+        new THREE.Vector3(0, 0, 0),
+        0.22,
+        0x38d9ff,
+        0.05,
+        0.03
+      );
+      const inclineFricArrow = new THREE.ArrowHelper(
+        new THREE.Vector3(-1, 0, 0),
+        new THREE.Vector3(0, 0, 0),
+        0.18,
+        0xff5555,
+        0.05,
+        0.03
+      );
+      inclineGroup.add(inclineWeightArrow);
+      inclineGroup.add(inclineNormalArrow);
+      inclineGroup.add(inclineFricArrow);
+      scene.add(inclineGroup);
+
       // =====================================================
       // 4. SHARED VECTOR ARROWS & SHOCKWAVE MESH
       // =====================================================
@@ -912,6 +1503,11 @@ export default function App() {
         hookeGroup.visible = currentExp === "hooke";
         collisionGroup.visible = currentExp === "collision";
         projectileGroup.visible = currentExp === "projectile";
+        pendulumGroup.visible = currentExp === "pendulum";
+        electricGroup.visible = currentExp === "electric";
+        waveGroup.visible = currentExp === "wave";
+        opticsGroup.visible = currentExp === "optics";
+        inclineGroup.visible = currentExp === "incline";
 
         // Hand gesture parsing or mouse fallback
         let primaryHand = detectedHands[0] || null;
@@ -1427,6 +2023,327 @@ export default function App() {
           velocityArrow.visible = false;
         }
 
+        // -----------------------------------------------------
+        // EXPERIMENT 6: SIMPLE HARMONIC PENDULUM
+        // -----------------------------------------------------
+        else if (currentExp === "pendulum") {
+          const pend = simState.pendulum;
+          const currentBobX = pend.pivotX + pend.length * Math.sin(pend.theta);
+          const currentBobY = pend.pivotY - pend.length * Math.cos(pend.theta);
+
+          // Interaction: Drag bob with hand or mouse pointer
+          if (primaryHand && !effectiveFrozen) {
+            const dx = primaryHand.x - pend.pivotX;
+            const dy = primaryHand.y - pend.pivotY;
+            const handAngle = Math.atan2(dx, -dy);
+            const distToBob = Math.sqrt(
+              Math.pow(primaryHand.x - currentBobX, 2) + Math.pow(primaryHand.y - currentBobY, 2)
+            );
+
+            if (distToBob < 0.35 || pend.isGrabbed) {
+              pend.isGrabbed = true;
+              pend.theta = Math.max(-1.1, Math.min(1.1, handAngle));
+              pend.omega = 0;
+            } else {
+              pend.isGrabbed = false;
+            }
+          } else {
+            pend.isGrabbed = false;
+          }
+
+          if (!pend.isGrabbed && !effectiveFrozen) {
+            const nextState = updatePendulumRK4({
+              theta: pend.theta,
+              omega: pend.omega,
+              length: pend.length,
+              mass: pend.mass,
+              gravity: pend.gravity,
+              damping: pend.damping,
+              dt
+            });
+            pend.theta = nextState.theta;
+            pend.omega = nextState.omega;
+            pend.alpha = nextState.alpha;
+          }
+
+          const updatedBobX = pend.pivotX + pend.length * Math.sin(pend.theta);
+          const updatedBobY = pend.pivotY - pend.length * Math.cos(pend.theta);
+          pendulumBob.group.position.set(updatedBobX, updatedBobY, 0);
+
+          const rodPts = pendulumRod.geometry.attributes.position.array;
+          rodPts[0] = pend.pivotX; rodPts[1] = pend.pivotY; rodPts[2] = 0;
+          rodPts[3] = updatedBobX; rodPts[4] = updatedBobY; rodPts[5] = 0;
+          pendulumRod.geometry.attributes.position.needsUpdate = true;
+
+          const arcPts = pendulumArc.geometry.attributes.position.array;
+          const arcR = 0.28;
+          for (let i = 0; i < ARC_PTS; i++) {
+            const a = (i / (ARC_PTS - 1)) * pend.theta;
+            arcPts[i * 3] = pend.pivotX + arcR * Math.sin(a);
+            arcPts[i * 3 + 1] = pend.pivotY - arcR * Math.cos(a);
+            arcPts[i * 3 + 2] = 0;
+          }
+          pendulumArc.geometry.attributes.position.needsUpdate = true;
+
+          const speed = Math.abs(pend.length * pend.omega);
+          currentSpeedMag = speed;
+          currentAccelMag = Math.abs(pend.length * pend.alpha);
+          currentForceMag = pend.mass * pend.gravity * Math.abs(Math.sin(pend.theta));
+
+          if (currentShowVectors && speed > 0.05) {
+            velocityArrow.position.set(updatedBobX, updatedBobY, 0);
+            const dirX = Math.cos(pend.theta) * (pend.omega >= 0 ? 1 : -1);
+            const dirY = Math.sin(pend.theta) * (pend.omega >= 0 ? 1 : -1);
+            velocityArrow.setDirection(new THREE.Vector3(dirX, dirY, 0).normalize());
+            velocityArrow.setLength(Math.min(0.45, speed * 0.2), 0.05, 0.03);
+            velocityArrow.visible = true;
+          } else {
+            velocityArrow.visible = false;
+          }
+          forceArrow.visible = false;
+          accelArrow.visible = false;
+        }
+
+        // -----------------------------------------------------
+        // EXPERIMENT 7: ELECTRIC FIELD & CHARGES
+        // -----------------------------------------------------
+        else if (currentExp === "electric") {
+          const ele = simState.electric;
+          const q1 = ele.charges[0];
+          const q2 = ele.charges[1];
+          const probe = ele.probe;
+
+          if (primaryHand && !effectiveFrozen) {
+            probe.x = Math.max(-aspect + 0.1, Math.min(aspect - 0.1, primaryHand.x));
+            probe.y = Math.max(-0.85, Math.min(0.85, primaryHand.y));
+          }
+
+          const fieldAtProbe = computeElectricFieldVector(
+            [ { x: q1.x, y: q1.y, q: q1.q }, { x: q2.x, y: q2.y, q: q2.q } ],
+            probe.x,
+            probe.y
+          );
+
+          charge1Mesh.group.position.set(q1.x, q1.y, 0);
+          charge2Mesh.group.position.set(q2.x, q2.y, 0);
+          probeMesh.group.position.set(probe.x, probe.y, 0);
+
+          for (let i = 0; i < fieldArrows.length; i++) {
+            const arr = fieldArrows[i];
+            const gx = arr.userData.origX;
+            const gy = arr.userData.origY;
+            const fv = computeElectricFieldVector(
+              [ { x: q1.x, y: q1.y, q: q1.q }, { x: q2.x, y: q2.y, q: q2.q } ],
+              gx,
+              gy
+            );
+            if (fv.magnitude > 0.001) {
+              arr.setDirection(new THREE.Vector3(fv.Ex, fv.Ey, 0).normalize());
+              const visualLen = Math.min(0.14, 0.04 + Math.log10(1 + fv.magnitude) * 0.05);
+              arr.setLength(visualLen, visualLen * 0.35, visualLen * 0.25);
+              arr.visible = true;
+            } else {
+              arr.visible = false;
+            }
+          }
+
+          currentForceMag = fieldAtProbe.magnitude * Math.abs(probe.q);
+          currentSpeedMag = 0;
+          currentAccelMag = currentForceMag;
+
+          if (currentShowVectors && fieldAtProbe.magnitude > 0.01) {
+            forceArrow.position.set(probe.x, probe.y, 0);
+            const fx = fieldAtProbe.Ex * probe.q;
+            const fy = fieldAtProbe.Ey * probe.q;
+            forceArrow.setDirection(new THREE.Vector3(fx, fy, 0).normalize());
+            forceArrow.setLength(Math.min(0.5, currentForceMag * 0.08), 0.06, 0.04);
+            forceArrow.visible = true;
+          } else {
+            forceArrow.visible = false;
+          }
+          velocityArrow.visible = false;
+          accelArrow.visible = false;
+        }
+
+        // -----------------------------------------------------
+        // EXPERIMENT 8: WAVE INTERFERENCE
+        // -----------------------------------------------------
+        else if (currentExp === "wave") {
+          const w = simState.wave;
+
+          if (primaryHand && !effectiveFrozen) {
+            const normY = (primaryHand.y + 0.6) / 1.2;
+            const targetPhase = Math.round(Math.max(0, Math.min(1, normY)) * 360);
+            w.phaseDeg = targetPhase;
+            w.phaseRad = (targetPhase * Math.PI) / 180;
+          }
+
+          const w1Arr = wave1Line.geometry.attributes.position.array;
+          const w2Arr = wave2Line.geometry.attributes.position.array;
+          const wResArr = waveResLine.geometry.attributes.position.array;
+
+          const spanX = aspect * 1.8;
+          const k = 4.0;
+          const omega = 2 * Math.PI * w.freq;
+
+          for (let i = 0; i < WAVE_POINTS; i++) {
+            const x = -aspect * 0.9 + (i / (WAVE_POINTS - 1)) * spanX;
+            const y1 = (w.a1 * 0.22) * Math.sin(k * x - omega * totalSimTime);
+            const y2 = (w.a2 * 0.22) * Math.sin(k * x - omega * totalSimTime + w.phaseRad);
+            const yRes = y1 + y2;
+
+            w1Arr[i * 3] = x; w1Arr[i * 3 + 1] = y1 + 0.35; w1Arr[i * 3 + 2] = 0;
+            w2Arr[i * 3] = x; w2Arr[i * 3 + 1] = y2 - 0.35; w2Arr[i * 3 + 2] = 0;
+            wResArr[i * 3] = x; wResArr[i * 3 + 1] = yRes; wResArr[i * 3 + 2] = 0;
+          }
+          wave1Line.geometry.attributes.position.needsUpdate = true;
+          wave2Line.geometry.attributes.position.needsUpdate = true;
+          waveResLine.geometry.attributes.position.needsUpdate = true;
+
+          const resAmp = Math.sqrt(w.a1 * w.a1 + w.a2 * w.a2 + 2 * w.a1 * w.a2 * Math.cos(w.phaseRad));
+          currentForceMag = resAmp;
+          currentSpeedMag = w.freq;
+          currentAccelMag = w.phaseDeg;
+
+          forceArrow.visible = false;
+          velocityArrow.visible = false;
+          accelArrow.visible = false;
+        }
+
+        // -----------------------------------------------------
+        // EXPERIMENT 9: REFLECTION & REFRACTION
+        // -----------------------------------------------------
+        else if (currentExp === "optics") {
+          const opt = simState.optics;
+
+          if (primaryHand && !effectiveFrozen) {
+            const dx = primaryHand.x;
+            const dy = primaryHand.y;
+            if (dy > 0.05) {
+              const angDeg = Math.round(Math.abs(Math.atan2(-dx, dy) * (180 / Math.PI)));
+              opt.incidentAngleDeg = Math.max(0, Math.min(85, angDeg));
+            }
+          }
+
+          const rays = computeOpticsRays({
+            incidentAngleDeg: opt.incidentAngleDeg,
+            n1: opt.n1,
+            n2: opt.n2
+          });
+
+          const incRad = (opt.incidentAngleDeg * Math.PI) / 180;
+          const srcX = -0.75 * Math.sin(incRad);
+          const srcY = 0.75 * Math.cos(incRad);
+
+          laserEmitter.position.set(srcX, srcY, 0);
+          laserEmitter.rotation.z = -incRad + Math.PI / 2;
+
+          const incPts = incRayLine.geometry.attributes.position.array;
+          incPts[0] = srcX; incPts[1] = srcY; incPts[2] = 0;
+          incPts[3] = 0; incPts[4] = 0; incPts[5] = 0;
+          incRayLine.geometry.attributes.position.needsUpdate = true;
+
+          const reflRad = (rays.reflectionAngleDeg * Math.PI) / 180;
+          const reflX = 0.75 * Math.sin(reflRad);
+          const reflY = 0.75 * Math.cos(reflRad);
+          const reflPts = reflRayLine.geometry.attributes.position.array;
+          reflPts[0] = 0; reflPts[1] = 0; reflPts[2] = 0;
+          reflPts[3] = reflX; reflPts[4] = reflY; reflPts[5] = 0;
+          reflRayLine.geometry.attributes.position.needsUpdate = true;
+          reflRayLine.material.opacity = rays.isTotalInternalReflection ? 1.0 : 0.65;
+
+          const refrPts = refrRayLine.geometry.attributes.position.array;
+          if (rays.isTotalInternalReflection) {
+            refrRayLine.visible = false;
+          } else {
+            refrRayLine.visible = true;
+            const refrRad = (rays.refractionAngleDeg * Math.PI) / 180;
+            const refrX = 0.75 * Math.sin(refrRad);
+            const refrY = -0.75 * Math.cos(refrRad);
+            refrPts[0] = 0; refrPts[1] = 0; refrPts[2] = 0;
+            refrPts[3] = refrX; refrPts[4] = refrY; refrPts[5] = 0;
+            refrRayLine.geometry.attributes.position.needsUpdate = true;
+          }
+
+          currentForceMag = rays.isTotalInternalReflection ? 100 : opt.incidentAngleDeg;
+          currentSpeedMag = rays.refractionAngleDeg || 0;
+          currentAccelMag = rays.criticalAngleDeg || 0;
+
+          forceArrow.visible = false;
+          velocityArrow.visible = false;
+          accelArrow.visible = false;
+        }
+
+        // -----------------------------------------------------
+        // EXPERIMENT 10: FRICTION & INCLINED PLANE
+        // -----------------------------------------------------
+        else if (currentExp === "incline") {
+          const inc = simState.incline;
+
+          if (primaryHand && !effectiveFrozen) {
+            const normY = (primaryHand.y + 0.3) / 0.8;
+            inc.angleDeg = Math.round(Math.max(5, Math.min(60, normY * 60)));
+            if (isFastImpulse) {
+              inc.blockVelocity = 1.2;
+            }
+          }
+
+          const angRad = (inc.angleDeg * Math.PI) / 180;
+          const rampOriginX = -0.85;
+          const rampOriginY = -0.55;
+          const rampLen = 1.4;
+
+          if (!effectiveFrozen) {
+            const next = updateInclinedPlaneMotion({
+              angleDeg: inc.angleDeg,
+              mass: inc.mass,
+              muStatic: inc.muStatic,
+              muKinetic: inc.muKinetic,
+              blockDist: inc.blockDist,
+              blockVelocity: inc.blockVelocity,
+              dt
+            });
+            inc.blockDist = next.blockDist;
+            inc.blockVelocity = next.blockVelocity;
+            inc.isSlipping = next.isSlipping;
+          }
+
+          const rampEndX = rampOriginX + rampLen * Math.cos(angRad);
+          const rampEndY = rampOriginY + rampLen * Math.sin(angRad);
+          const rampPts = rampMesh.geometry.attributes.position.array;
+          rampPts[0] = rampOriginX; rampPts[1] = rampOriginY; rampPts[2] = 0;
+          rampPts[3] = rampEndX; rampPts[4] = rampOriginY; rampPts[5] = 0;
+          rampPts[6] = rampEndX; rampPts[7] = rampEndY; rampPts[8] = 0;
+          rampPts[9] = rampOriginX; rampPts[10] = rampOriginY; rampPts[11] = 0;
+          rampMesh.geometry.attributes.position.needsUpdate = true;
+
+          const blockX = rampOriginX + inc.blockDist * Math.cos(angRad);
+          const blockY = rampOriginY + inc.blockDist * Math.sin(angRad) + 0.04;
+          blockMesh.position.set(blockX, blockY, 0);
+          blockMesh.rotation.z = angRad;
+
+          const weight = inc.mass * inc.gravity;
+          const normF = weight * Math.cos(angRad);
+          const fricF = inc.isSlipping ? inc.muKinetic * normF : weight * Math.sin(angRad);
+
+          inclineWeightArrow.position.set(blockX, blockY, 0);
+          inclineNormalArrow.position.set(blockX, blockY, 0);
+          inclineNormalArrow.setDirection(new THREE.Vector3(-Math.sin(angRad), Math.cos(angRad), 0).normalize());
+          inclineNormalArrow.setLength(Math.min(0.35, normF * 0.03), 0.04, 0.025);
+
+          inclineFricArrow.position.set(blockX, blockY, 0);
+          inclineFricArrow.setDirection(new THREE.Vector3(Math.cos(angRad), Math.sin(angRad), 0).normalize());
+          inclineFricArrow.setLength(Math.min(0.3, fricF * 0.035), 0.04, 0.025);
+
+          currentForceMag = fricF;
+          currentSpeedMag = Math.abs(inc.blockVelocity);
+          currentAccelMag = inc.isSlipping ? Math.abs((weight * Math.sin(angRad) - fricF) / inc.mass) : 0;
+
+          forceArrow.visible = false;
+          velocityArrow.visible = false;
+          accelArrow.visible = false;
+        }
+
         // Ambient particles drift
         ambientParticles.rotation.z = now * 0.0001;
 
@@ -1661,6 +2578,197 @@ export default function App() {
               );
               setFormulaTag("R = (v₀² sin 2θ) / g");
             }
+          } else if (currentExp === "pendulum") {
+            const pend = simState.pendulum;
+            const thetaDeg = (pend.theta * 180) / Math.PI;
+            const theoPeriod = computePendulumSmallAnglePeriod(pend.length, pend.gravity);
+            const u = pend.mass * pend.gravity * pend.length * (1 - Math.cos(pend.theta));
+            const ke = 0.5 * pend.mass * Math.pow(pend.length * pend.omega, 2);
+
+            telemetryRef.current = {
+              experimentName: "Simple Pendulum",
+              mass: pend.mass,
+              velocity: Number(currentSpeedMag.toFixed(2)),
+              acceleration: Number(currentAccelMag.toFixed(2)),
+              displacement: Number(thetaDeg.toFixed(1)),
+              time: Number(totalSimTime.toFixed(1)),
+              isFrozen: effectiveFrozen
+            };
+
+            setPhysicsState({
+              thetaDeg,
+              pendulumLength: pend.length,
+              pendulumMass: pend.mass,
+              pendulumPeriodTheo: theoPeriod,
+              pendulumOmega: pend.omega,
+              potentialEnergy: u,
+              kineticEnergy: ke,
+              velocity: currentSpeedMag,
+              acceleration: currentAccelMag,
+              force: currentForceMag,
+              hasInteracted: true
+            });
+
+            if (pend.isGrabbed) {
+              setExplanation(`Holding pendulum bob at initial release angle θ = ${thetaDeg.toFixed(1)}°. Release to oscillate.`);
+              setFormulaTag("θ₀ = " + thetaDeg.toFixed(0) + "°");
+            } else if (Math.abs(pend.omega) > 0.05) {
+              setExplanation(`Oscillating: T_theo = ${theoPeriod.toFixed(2)} s. Restoring torque τ = -m·g·L·sin(θ).`);
+              setFormulaTag("T = 2π√(L/g)");
+            } else {
+              setExplanation("Pendulum resting near equilibrium. Drag bob sideways to set an oscillation angle!");
+              setFormulaTag("SHM: d²θ/dt² = -(g/L)sinθ");
+            }
+          } else if (currentExp === "electric") {
+            const ele = simState.electric;
+            const q1 = ele.charges[0];
+            const q2 = ele.charges[1];
+            const probe = ele.probe;
+            const fieldAtProbe = computeElectricFieldVector(
+              [ { x: q1.x, y: q1.y, q: q1.q }, { x: q2.x, y: q2.y, q: q2.q } ],
+              probe.x,
+              probe.y
+            );
+            const potAtProbe = computeElectricPotential(
+              [ { x: q1.x, y: q1.y, q: q1.q }, { x: q2.x, y: q2.y, q: q2.q } ],
+              probe.x,
+              probe.y
+            );
+
+            telemetryRef.current = {
+              experimentName: "Electric Field & Charges",
+              mass: 0.01,
+              force: Number(currentForceMag.toFixed(2)),
+              velocity: 0,
+              time: Number(totalSimTime.toFixed(1)),
+              isFrozen: effectiveFrozen
+            };
+
+            setPhysicsState({
+              charge1Q: q1.q,
+              charge2Q: q2.q,
+              chargeTestQ: probe.q,
+              electricFieldMag: fieldAtProbe.magnitude,
+              electricPotential: potAtProbe,
+              force: currentForceMag,
+              posX: probe.x,
+              posY: probe.y,
+              hasInteracted: true
+            });
+
+            setExplanation(
+              `Test probe at (${probe.x.toFixed(2)}, ${probe.y.toFixed(2)}) detects field |E| = ${fieldAtProbe.magnitude.toFixed(2)} N/C, potential V = ${potAtProbe.toFixed(1)} V.`
+            );
+            setFormulaTag("E = k_e · Σ(q_i / r_i²)");
+          } else if (currentExp === "wave") {
+            const w = simState.wave;
+            const resAmp = Math.sqrt(w.a1 * w.a1 + w.a2 * w.a2 + 2 * w.a1 * w.a2 * Math.cos(w.phaseRad));
+            const regime = Math.abs(w.phaseDeg - 180) < 15
+              ? 'destructive'
+              : (w.phaseDeg < 15 || w.phaseDeg > 345)
+                ? 'constructive'
+                : 'partial';
+
+            telemetryRef.current = {
+              experimentName: "Wave Interference",
+              velocity: Number(w.freq.toFixed(1)),
+              time: Number(totalSimTime.toFixed(1)),
+              isFrozen: effectiveFrozen
+            };
+
+            setPhysicsState({
+              waveA1: w.a1,
+              waveA2: w.a2,
+              wavePhaseDeg: w.phaseDeg,
+              waveFreq: w.freq,
+              waveResultantAmp: resAmp,
+              waveRegime: regime,
+              hasInteracted: true
+            });
+
+            if (regime === 'constructive') {
+              setExplanation(`Constructive interference! Phase shift Δφ = ${w.phaseDeg}°: crests align, reinforcing amplitude to ${resAmp.toFixed(2)} m.`);
+              setFormulaTag("A_res = A₁ + A₂ (Constructive)");
+            } else if (regime === 'destructive') {
+              setExplanation(`Destructive cancellation! Phase shift Δφ = ${w.phaseDeg}°: crests meet troughs, canceling to ${resAmp.toFixed(2)} m.`);
+              setFormulaTag("A_res = |A₁ - A₂| (Destructive)");
+            } else {
+              setExplanation(`Intermediate interference with Δφ = ${w.phaseDeg}°. Resultant amplitude = ${resAmp.toFixed(2)} m.`);
+              setFormulaTag("A_res = √(A₁² + A₂² + 2A₁A₂ cosΔφ)");
+            }
+          } else if (currentExp === "optics") {
+            const opt = simState.optics;
+            const rays = computeOpticsRays({
+              incidentAngleDeg: opt.incidentAngleDeg,
+              n1: opt.n1,
+              n2: opt.n2
+            });
+
+            telemetryRef.current = {
+              experimentName: "Reflection & Refraction",
+              time: Number(totalSimTime.toFixed(1)),
+              isFrozen: effectiveFrozen
+            };
+
+            setPhysicsState({
+              opticsIncidentAngle: opt.incidentAngleDeg,
+              opticsN1: opt.n1,
+              opticsN2: opt.n2,
+              opticsRefractAngle: rays.refractionAngleDeg,
+              isTIR: rays.isTotalInternalReflection,
+              hasInteracted: true
+            });
+
+            if (rays.isTotalInternalReflection) {
+              setExplanation(`TOTAL INTERNAL REFLECTION! θ₁ (${opt.incidentAngleDeg}°) exceeds critical angle θ_c (${rays.criticalAngleDeg?.toFixed(1)}°). No light enters medium 2.`);
+              setFormulaTag("TIR: θ₁ > θ_c = arcsin(n₂/n₁)");
+            } else {
+              setExplanation(`Snell's Law: n₁·sin(θ₁) = n₂·sin(θ₂). Incident: ${opt.incidentAngleDeg}°, Reflected: ${rays.reflectionAngleDeg}°, Refracted: ${rays.refractionAngleDeg?.toFixed(1)}°.`);
+              setFormulaTag("n₁ sin θ₁ = n₂ sin θ₂");
+            }
+          } else if (currentExp === "incline") {
+            const inc = simState.incline;
+            const angRad = (inc.angleDeg * Math.PI) / 180;
+            const weight = inc.mass * inc.gravity;
+            const normF = weight * Math.cos(angRad);
+            const maxStaticF = inc.muStatic * normF;
+            const parallelGrav = weight * Math.sin(angRad);
+            const isSliding = inc.isSlipping;
+            const fricF = isSliding ? inc.muKinetic * normF : parallelGrav;
+            const netF = Math.max(0, parallelGrav - fricF);
+            const accel = isSliding ? netF / inc.mass : 0;
+
+            telemetryRef.current = {
+              experimentName: "Friction & Inclined Plane",
+              mass: inc.mass,
+              force: Number(fricF.toFixed(2)),
+              acceleration: Number(accel.toFixed(2)),
+              velocity: Number(Math.abs(inc.blockVelocity).toFixed(2)),
+              time: Number(totalSimTime.toFixed(1)),
+              isFrozen: effectiveFrozen
+            };
+
+            setPhysicsState({
+              inclineAngle: inc.angleDeg,
+              inclineMass: inc.mass,
+              inclineMuStatic: inc.muStatic,
+              inclineMuKinetic: inc.muKinetic,
+              inclineNormalForce: normF,
+              inclineFrictionForce: fricF,
+              inclineNetForce: netF,
+              inclineAccel: accel,
+              inclineIsSlipping: isSliding,
+              velocity: Math.abs(inc.blockVelocity),
+              hasInteracted: true
+            });
+
+            if (isSliding) {
+              setExplanation(`Slipping down ramp! Gravity parallel (${parallelGrav.toFixed(1)} N) > max static friction (${maxStaticF.toFixed(1)} N). a = ${accel.toFixed(2)} m/s².`);
+              setFormulaTag("a = g(sin θ - μ_k cos θ)");
+            } else {
+              setExplanation(`Static equilibrium: friction matches downhill gravity component (f_s = ${parallelGrav.toFixed(1)} N). Ramp angle below angle of repose.`);
+              setFormulaTag("f_s ≤ μ_s · N (At Rest)");
+            }
           }
 
           setActiveGesture(currentGesture);
@@ -1681,7 +2789,7 @@ export default function App() {
               force: currentForceMag,
               acceleration: currentAccelMag,
               velocity: currentSpeedMag,
-              mass: mass,
+              mass: settingsRef.current.mass,
               isFrozen: effectiveFrozen,
               handSpeed: maxHandSpeed,
               isWallHit,
@@ -2030,6 +3138,48 @@ export default function App() {
           });
         }}
         onOpenReport={() => setIsReportOpen(true)}
+        // Experiment 6: Pendulum props
+        pendulumLength={pendulumLength}
+        onChangePendulumLength={setPendulumLength}
+        pendulumAngle={pendulumAngle}
+        onChangePendulumAngle={setPendulumAngle}
+        pendulumMass={pendulumMass}
+        onChangePendulumMass={setPendulumMass}
+        // Experiment 7: Electric props
+        charge1Q={charge1Q}
+        onChangeCharge1Q={setCharge1Q}
+        charge2Q={charge2Q}
+        onChangeCharge2Q={setCharge2Q}
+        chargeTestQ={chargeTestQ}
+        onChangeChargeTestQ={setChargeTestQ}
+        onResetCharges={() => simControlsRef.current.resetCharges?.()}
+        // Experiment 8: Wave props
+        waveA1={waveA1}
+        onChangeWaveA1={setWaveA1}
+        waveA2={waveA2}
+        onChangeWaveA2={setWaveA2}
+        wavePhaseDeg={wavePhaseDeg}
+        onChangeWavePhaseDeg={setWavePhaseDeg}
+        waveFreq={waveFreq}
+        onChangeWaveFreq={setWaveFreq}
+        // Experiment 9: Optics props
+        opticsIncidentAngle={opticsIncidentAngle}
+        onChangeOpticsIncidentAngle={setOpticsIncidentAngle}
+        opticsN1={opticsN1}
+        onChangeOpticsN1={setOpticsN1}
+        opticsN2={opticsN2}
+        onChangeOpticsN2={setOpticsN2}
+        onSwapMedia={() => simControlsRef.current.swapOpticsMedia?.()}
+        // Experiment 10: Incline props
+        inclineAngle={inclineAngle}
+        onChangeInclineAngle={setInclineAngle}
+        inclineMass={inclineMass}
+        onChangeInclineMass={setInclineMass}
+        inclineMuStatic={inclineMuStatic}
+        onChangeInclineMuStatic={setInclineMuStatic}
+        inclineMuKinetic={inclineMuKinetic}
+        onChangeInclineMuKinetic={setInclineMuKinetic}
+        onResetInclineBlock={() => simControlsRef.current.resetInclineBlock?.()}
       />
 
       {/* 10. LEARN PANEL (BOTTOM LEFT) */}
@@ -2116,7 +3266,7 @@ export default function App() {
         onClose={() => setIsReportOpen(false)}
         experiment={activeExperiment}
         physicsData={physicsState}
-        quizResult={lastQuizResult || { score: quizScoreBadge || 100 }}
+        quizResult={lastQuizResult || (quizScoreBadge !== null ? { score: quizScoreBadge } : null)}
         studentName={studentName}
       />
 

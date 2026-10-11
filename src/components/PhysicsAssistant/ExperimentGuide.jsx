@@ -1,12 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { getExperimentGuide } from '../../services/physicsAI';
 
-export default function ExperimentGuide({ onVoiceRequest, onSendToAnalyze }) {
+export default function ExperimentGuide({ onSendToAnalyze }) {
   const [experiments, setExperiments] = useState([
     { id: 'newton_second_law', name: "Newton's 2nd Law & Acceleration" },
-    { id: 'hookes_law', name: "Hooke's Law & Elastic Restoring Force" },
     { id: 'momentum_shockwave', name: "Impulse, Momentum & Shockwaves" },
-{ id: 'projectile_motion', name: "Projectile Motion & Trajectory" }
+    { id: 'hookes_law', name: "Hooke's Law & Elastic Springs" },
+    { id: 'collision_momentum', name: "Collisions & Momentum Conservation" },
+    { id: 'projectile_motion', name: "Projectile Motion & Trajectory" },
+    { id: 'simple_pendulum', name: "Simple Harmonic Pendulum" },
+    { id: 'electric_field', name: "Electric Field & Point Charges" },
+    { id: 'wave_interference', name: "Wave Interference & Superposition" },
+    { id: 'optics_refraction', name: "Reflection & Refraction (Snell's Law)" },
+    { id: 'inclined_plane', name: "Friction & Inclined Plane Dynamics" }
   ]);
   const [selectedExpId, setSelectedExpId] = useState('newton_second_law');
   const [currentStep, setCurrentStep] = useState(1);

@@ -11,7 +11,10 @@ let lastState = {
   isMoving: false,
   isFrozen: false,
   hadBounce: false,
-  hadFastImpulse: false
+  hadFastImpulse: false,
+  wasTIR: false,
+  wasSlipping: false,
+  wasDestructiveWave: false
 };
 
 /**
@@ -173,6 +176,69 @@ export function evaluatePhysicsEvents(telemetry, options = {}) {
     if (voiceEnabled) speakPhysicsEvent('Friction slowed the ball to a complete stop.');
   }
 
+  // 6. Total Internal Reflection (Optics Lab)
+  if (telemetry.isTIR && !lastState.wasTIR) {
+    const ev = {
+      id: `ev_${now}_tir`,
+      type: 'TIR_EVENT',
+      typeLabel: '💎 Total Internal Reflection',
+      timestamp: now,
+      formattedTime,
+      position: { x: posX, y: posY },
+      estimatedForce: 'N/A',
+      acceleration: '0.00',
+      velocityAfter: 'c',
+      explanation: 'Incident angle exceeded critical angle: 100% of light is totally internally reflected.'
+    };
+    events.push(ev);
+    if (voiceEnabled) speakPhysicsEvent('Total internal reflection achieved.');
+    lastState.wasTIR = true;
+  } else if (!telemetry.isTIR) {
+    lastState.wasTIR = false;
+  }
+
+  // 7. Incline Slip Threshold (Incline Lab)
+  if (telemetry.isSlipping && !lastState.wasSlipping) {
+    const ev = {
+      id: `ev_${now}_slip`,
+      type: 'INCLINE_SLIP',
+      typeLabel: '⚡ Slip Threshold Exceeded',
+      timestamp: now,
+      formattedTime,
+      position: { x: posX, y: posY },
+      estimatedForce: Number(force).toFixed(2),
+      acceleration: Number(acceleration).toFixed(2),
+      velocityAfter: Number(velocity).toFixed(2),
+      explanation: 'Downslope gravity component exceeded maximum static friction (tan θ > μ_s). Sliding initiated.'
+    };
+    events.push(ev);
+    if (voiceEnabled) speakPhysicsEvent('Downslope force exceeded static friction. Block is sliding.');
+    lastState.wasSlipping = true;
+  } else if (!telemetry.isSlipping) {
+    lastState.wasSlipping = false;
+  }
+
+  // 8. Wave Superposition Cancellation (Wave Lab)
+  if (telemetry.isDestructive && !lastState.wasDestructiveWave) {
+    const ev = {
+      id: `ev_${now}_destruct`,
+      type: 'DESTRUCTIVE_INTERFERENCE',
+      typeLabel: '🌊 Destructive Interference',
+      timestamp: now,
+      formattedTime,
+      position: { x: posX, y: posY },
+      estimatedForce: '0.00',
+      acceleration: '0.00',
+      velocityAfter: '0.00',
+      explanation: 'Phase difference equals π rad (180°): wave crests meet troughs for complete destructive cancellation.'
+    };
+    events.push(ev);
+    if (voiceEnabled) speakPhysicsEvent('Destructive interference: waves cancel.');
+    lastState.wasDestructiveWave = true;
+  } else if (!telemetry.isDestructive) {
+    lastState.wasDestructiveWave = false;
+  }
+
   // Update tracking state
   lastState.isApplyingForce = isApplying;
   lastState.isMoving = isMoving;
@@ -180,3 +246,4 @@ export function evaluatePhysicsEvents(telemetry, options = {}) {
 
   return events;
 }
+

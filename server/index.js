@@ -266,8 +266,211 @@ const PRESET_EXPERIMENTS = {
         formula: "v_1' = \\frac{m_1 - m_2}{m_1 + m_2} v_1",
       }
     ]
+  },
+  simple_pendulum: {
+    id: 'simple_pendulum',
+    name: "Simple Pendulum & Harmonic Oscillation",
+    steps: [
+      {
+        step: 1,
+        title: "Establish Stable Equilibrium (θ = 0)",
+        instruction: "Observe the pendulum bob suspended straight down along the vertical line. Gravity and string tension cancel in equilibrium.",
+        physicsConcept: "At θ = 0, tension T = m·g balances downward weight. Net tangential restoring force is zero.",
+        actionTip: "Ensure the bob is at rest before applying displacement.",
+        formula: "\\sum F_{\\text{tangent}} = -m g \\sin(0) = 0",
+      },
+      {
+        step: 2,
+        title: "Displace Bob to Initial Angle (θ₀)",
+        instruction: "Use hand or mouse to drag the bob away from the vertical line to an initial angle (e.g. 15°).",
+        physicsConcept: "Displacement imparts gravitational potential energy: U_g = m·g·L·(1 - cos θ₀).",
+        actionTip: "For accurate small-angle comparison, keep initial displacement under 20°.",
+        formula: "U_g = m g L (1 - \\cos\\theta_0)",
+      },
+      {
+        step: 3,
+        title: "Release Bob into Oscillation",
+        instruction: "Release your hold and watch the bob swing periodically back and forth across the equilibrium center.",
+        physicsConcept: "The restoring tangential force is F_restoring = -m·g·sin(θ). For small angles sin(θ) ≈ θ, yielding simple harmonic motion.",
+        actionTip: "Notice how speed peaks at bottom center (θ = 0) and drops to zero at the amplitude turns.",
+        formula: "\\frac{d^2\\theta}{dt^2} + \\frac{g}{L} \\sin\\theta = 0",
+      },
+      {
+        step: 4,
+        title: "Measure & Verify Period (T)",
+        instruction: "Compare the simulated round-trip oscillation period with the theoretical prediction T = 2π√(L/g).",
+        physicsConcept: "The theoretical small-angle period depends solely on string length L and gravitational field g; bob mass m does not affect period.",
+        actionTip: "Vary string length L and observe how longer strings increase period T.",
+        formula: "T = 2\\pi \\sqrt{\\frac{L}{g}}",
+      }
+    ]
+  },
+  electric_field: {
+    id: 'electric_field',
+    name: "Electric Field & Point Charge Superposition",
+    steps: [
+      {
+        step: 1,
+        title: "Inspect Point Charge Distribution",
+        instruction: "Observe positive charge q₁ (red) and negative charge q₂ (blue) placed on the 2D coordinate plane.",
+        physicsConcept: "Point charges generate radial electric fields according to Coulomb's Law: E = k·q / r² directed away from (+) and toward (-).",
+        actionTip: "Positive charges radiate outward arrows; negative charges draw inward arrows.",
+        formula: "E = \\frac{1}{4\\pi \\varepsilon_0} \\frac{q}{r^2} \\hat{r}",
+      },
+      {
+        step: 2,
+        title: "Position Test Probe (q₀)",
+        instruction: "Move your hand or mouse to guide the yellow test probe throughout the surrounding space.",
+        physicsConcept: "A positive test charge experiences electric force F = q₀ · E, pointing along the net electric field vector.",
+        actionTip: "Move probe between the two charges to see where electric field vectors add or cancel.",
+        formula: "\\vec{F}_e = q_0 \\vec{E}_{net}",
+      },
+      {
+        step: 3,
+        title: "Apply Vector Superposition",
+        instruction: "Observe the yellow net field vector arrow computed by summing field contributions E₁ and E₂.",
+        physicsConcept: "By the Principle of Superposition, net electric field at any point is the exact vector sum: E_net = E₁ + E₂.",
+        actionTip: "Observe how field intensity grows extremely strong when moving close to either source charge.",
+        formula: "\\vec{E}_{net} = \\sum_{i} \\vec{E}_i = k \\sum_i \\frac{q_i}{r_i^2} \\hat{r}_i",
+      },
+      {
+        step: 4,
+        title: "Adjust Charge Magnitudes",
+        instruction: "Use the HUD sliders to change q₁ and q₂ values, or make both charges positive.",
+        physicsConcept: "Like charges create a central null point (E_net = 0) where opposing field vectors cancel completely.",
+        actionTip: "Set q₁ = +3 μC and q₂ = +3 μC and locate the center where E drops to 0 N/C.",
+        formula: "\\vec{E}_{net} = 0 \\quad (\\text{at null point})",
+      }
+    ]
+  },
+  wave_interference: {
+    id: 'wave_interference',
+    name: "Wave Interference & Superposition Principle",
+    steps: [
+      {
+        step: 1,
+        title: "Inspect Component Waves (Wave 1 & Wave 2)",
+        instruction: "Notice the individual cyan (Wave 1) and magenta (Wave 2) sinusoidal waves propagating along the x-axis.",
+        physicsConcept: "A traveling or standing sinusoidal wave is modeled by y(x,t) = A · sin(k·x - ω·t + φ).",
+        actionTip: "Observe the frequency f and wavelength λ of each component wave.",
+        formula: "y_1 = A_1 \\sin(kx - \\omega t), \\quad y_2 = A_2 \\sin(kx - \\omega t + \\phi)",
+      },
+      {
+        step: 2,
+        title: "Observe Resultant Superposition",
+        instruction: "Look at the bold white/yellow composite wave, formed by the point-by-point algebraic sum y_res = y₁ + y₂.",
+        physicsConcept: "When two waves pass through the same medium simultaneously, the net displacement is the algebraic sum of individual displacements.",
+        actionTip: "Check that at any x-position, the height of the resultant wave equals the sum of the two component heights.",
+        formula: "y_{resultant}(x,t) = y_1(x,t) + y_2(x,t)",
+      },
+      {
+        step: 3,
+        title: "Demonstrate Constructive Interference",
+        instruction: "Set phase difference Δφ to 0 rad (in-phase). Observe the resultant amplitude double to A₁ + A₂.",
+        physicsConcept: "When waves are in-phase (Δφ = 0, 2π, 4π...), wave crests align with crests, producing maximum constructive amplification.",
+        actionTip: "Slide phase difference to 0 and watch the resultant peak grow to 3.0 m.",
+        formula: "A_{max} = A_1 + A_2 \\quad (\\text{when } \\Delta\\phi = 2n\\pi)",
+      },
+      {
+        step: 4,
+        title: "Demonstrate Destructive Interference",
+        instruction: "Slide phase difference Δφ to π rad (180° out-of-phase). Watch the waves cancel into a flat line.",
+        physicsConcept: "When waves are out-of-phase (Δφ = π, 3π...), crests align with troughs, leading to complete destructive cancellation when A₁ = A₂.",
+        actionTip: "Slide phase to exactly 3.14 rad and observe net displacement drop to near zero.",
+        formula: "A_{min} = |A_1 - A_2| = 0 \\quad (\\text{when } \\Delta\\phi = (2n+1)\\pi)",
+      }
+    ]
+  },
+  optics_refraction: {
+    id: 'optics_refraction',
+    name: "Reflection, Snell's Law & Refraction",
+    steps: [
+      {
+        step: 1,
+        title: "Inspect Boundary Interface & Normal",
+        instruction: "Observe the horizontal boundary separating Medium 1 (top, e.g. air n₁) from Medium 2 (bottom, e.g. glass n₂), and the dashed surface normal.",
+        physicsConcept: "All angles in geometric optics are strictly measured relative to the surface normal perpendicular to the boundary.",
+        actionTip: "Keep note of the surface normal line at 90° to the horizontal boundary.",
+        formula: "\\text{Normal Line } \\perp \\text{ Boundary Interface}",
+      },
+      {
+        step: 2,
+        title: "Verify the Law of Reflection",
+        instruction: "Direct the laser beam at incident angle θ₁ and observe the upward reflected ray angle θ_r.",
+        physicsConcept: "By the Law of Reflection, the angle of reflection strictly equals the angle of incidence: θ_r = θ₁.",
+        actionTip: "Change incident angle to 40° and verify reflected angle is exactly 40°.",
+        formula: "\\theta_{\\text{reflection}} = \\theta_{\\text{incident}}",
+      },
+      {
+        step: 3,
+        title: "Verify Snell's Law of Refraction",
+        instruction: "Observe the downward transmitted ray bending into Medium 2 at angle θ₂.",
+        physicsConcept: "Snell's Law states n₁·sin(θ₁) = n₂·sin(θ₂). When light enters a denser medium (n₂ > n₁), it slows down and bends toward the normal.",
+        actionTip: "Compare incident angle θ₁ vs refracted angle θ₂: notice θ₂ < θ₁ when entering glass (n=1.5).",
+        formula: "n_1 \\sin\\theta_1 = n_2 \\sin\\theta_2 \\implies \\theta_2 = \\arcsin\\left(\\frac{n_1}{n_2} \\sin\\theta_1\\right)",
+      },
+      {
+        step: 4,
+        title: "Trigger Total Internal Reflection (TIR)",
+        instruction: "Set Medium 1 to dense glass (n₁ = 1.5) and Medium 2 to air (n₂ = 1.0). Increase θ₁ past the critical angle θ_c ≈ 41.8°.",
+        physicsConcept: "When traveling from a denser to a rarer medium at θ₁ > θ_c = arcsin(n₂/n₁), no light refracts; 100% is totally internally reflected.",
+        actionTip: "Watch the refracted ray vanish and the beam turn 100% into a brilliant reflected ray.",
+        formula: "\\theta_c = \\arcsin\\left(\\frac{n_2}{n_1}\\right)",
+      }
+    ]
+  },
+  inclined_plane: {
+    id: 'inclined_plane',
+    name: "Friction & Inclined Plane Dynamics",
+    steps: [
+      {
+        step: 1,
+        title: "Resolve Gravity into Slope Components",
+        instruction: "Observe the mass block resting on a ramp tilted at angle θ. Note the gravity force vectors.",
+        physicsConcept: "Gravity decomposes into a normal component F_N = m·g·cos(θ) into the ramp, and a downslope component F_parallel = m·g·sin(θ).",
+        actionTip: "Notice how increasing tilt θ increases downslope pull while decreasing the normal contact force.",
+        formula: "F_{\\parallel} = mg\\sin\\theta, \\quad F_N = mg\\cos\\theta",
+      },
+      {
+        step: 2,
+        title: "Observe Static Friction at Rest",
+        instruction: "Keep tilt angle shallow (e.g. 15°). The block remains stationary held by static friction f_s.",
+        physicsConcept: "Static friction matches the downhill pull up to its maximum threshold f_s,max = μ_s · F_N. As long as tan(θ) ≤ μ_s, the block cannot slide.",
+        actionTip: "Look at the uphill orange friction arrow counterbalancing the downhill pull.",
+        formula: "f_s \\le \\mu_s F_N = \\mu_s mg\\cos\\theta",
+      },
+      {
+        step: 3,
+        title: "Exceed the Critical Slip Angle",
+        instruction: "Tilt the ramp steeper until θ exceeds the critical angle θ_c = arctan(μ_s).",
+        physicsConcept: "When downslope gravity exceeds maximum static friction (mg sin θ > μ_s mg cos θ), static friction breaks down and sliding begins.",
+        actionTip: "Notice the transition moment: static friction drops to kinetic friction f_k = μ_k · F_N.",
+        formula: "\\theta_c = \\arctan(\\mu_s)",
+      },
+      {
+        step: 4,
+        title: "Calculate Sliding Acceleration (a)",
+        instruction: "Observe the block accelerating down the ramp with measured net acceleration a_net.",
+        physicsConcept: "Net force is F_net = mg sin θ - μ_k mg cos θ. Dividing by mass m gives acceleration a = g(sin θ - μ_k cos θ).",
+        actionTip: "Compare measured acceleration with theoretical formula a = g·(sin θ - μ_k·cos θ).",
+        formula: "a = g (\\sin\\theta - \\mu_k \\cos\\theta)",
+      }
+    ]
   }
 };
+
+// Aliases for short IDs so both frontend conventions match seamlessly
+PRESET_EXPERIMENTS.newton = PRESET_EXPERIMENTS.newton_second_law;
+PRESET_EXPERIMENTS.hooke = PRESET_EXPERIMENTS.hookes_law;
+PRESET_EXPERIMENTS.impulse = PRESET_EXPERIMENTS.momentum_shockwave;
+PRESET_EXPERIMENTS.projectile = PRESET_EXPERIMENTS.projectile_motion;
+PRESET_EXPERIMENTS.collision = PRESET_EXPERIMENTS.collision_momentum;
+PRESET_EXPERIMENTS.pendulum = PRESET_EXPERIMENTS.simple_pendulum;
+PRESET_EXPERIMENTS.electric = PRESET_EXPERIMENTS.electric_field;
+PRESET_EXPERIMENTS.wave = PRESET_EXPERIMENTS.wave_interference;
+PRESET_EXPERIMENTS.optics = PRESET_EXPERIMENTS.optics_refraction;
+PRESET_EXPERIMENTS.incline = PRESET_EXPERIMENTS.inclined_plane;
+
 
 // Fallback Q&A knowledge base
 function generateFallbackPhysicsAnswer(question) {
@@ -461,6 +664,101 @@ function generateFallbackPhysicsAnswer(question) {
         "1. Find initial velocity v_0 and final velocity v_f.",
         "2. Find the elapsed time interval Δt.",
         "3. Compute acceleration: a = (v_f - v_0) / Δt."
+      ]
+    };
+  }
+
+  if (q.includes("pendulum") || (q.includes("period") && q.includes("length")) || q.includes("bob")) {
+    return {
+      answer: "A simple pendulum consists of a point bob of mass m suspended by a massless string of length L. For small displacements (θ < 20°), the restoring force is approximately linear (sin θ ≈ θ), creating Simple Harmonic Motion with period T = 2π√(L/g). Notice that period depends ONLY on length L and gravity g — the bob's mass has no effect on oscillation period!",
+      formula: "T = 2\\pi \\sqrt{\\frac{L}{g}}, \\quad \\omega = \\sqrt{\\frac{g}{L}}",
+      variables: [
+        { symbol: "T", name: "Oscillation Period", unit: "Seconds (s)" },
+        { symbol: "L", name: "String Length", unit: "Meters (m)" },
+        { symbol: "g", name: "Gravitational Acceleration", unit: "9.80665 m/s²" },
+        { symbol: "θ", name: "Angular Displacement", unit: "Radians (rad) or Degrees (°)" }
+      ],
+      example: "A 1.0 meter pendulum has a theoretical period of T = 2π√(1.0 / 9.8) ≈ 2.007 seconds. Doubling length multiplies period by √2.",
+      steps: [
+        "1. Identify string length L and local gravity g.",
+        "2. Substitute into T = 2π√(L/g).",
+        "3. Note that mass m does not alter the oscillation timing."
+      ]
+    };
+  }
+
+  if (q.includes("electric") || q.includes("coulomb") || q.includes("charge") || (q.includes("field") && !q.includes("particle field"))) {
+    return {
+      answer: "An electric field E is a vector field surrounding electric charges that exerts electrostatic force on other charges. By Coulomb's Law, the field from a point charge is E = k·q / r² pointing radially outward from (+) charges and inward toward (-) charges. In multi-charge configurations, the net electric field at any point is the exact vector sum of all individual contributions (Principle of Superposition).",
+      formula: "\\vec{E}_{net} = k \\sum_i \\frac{q_i}{r_i^2} \\hat{r}_i, \\quad k = 8.988 \\times 10^9 \\text{ N}\\cdot\\text{m}^2/\\text{C}^2",
+      variables: [
+        { symbol: "E", name: "Electric Field Strength", unit: "Newtons per Coulomb (N/C)" },
+        { symbol: "q", name: "Source Charge", unit: "Coulombs (C, often μC)" },
+        { symbol: "r", name: "Distance from charge", unit: "Meters (m)" },
+        { symbol: "k", name: "Coulomb Constant", unit: "8.99 × 10⁹ N·m²/C²" }
+      ],
+      example: "Between two equal opposite charges (+q and -q), the electric field vectors add constructively in the middle, pointing from positive to negative.",
+      steps: [
+        "1. Calculate field magnitude from each charge: E = k·|q| / r².",
+        "2. Determine direction vector: outward for (+), inward for (-).",
+        "3. Sum components vectorially: E_net = (Σ E_x, Σ E_y)."
+      ]
+    };
+  }
+
+  if (q.includes("wave") || q.includes("interference") || q.includes("superposition") || q.includes("constructive") || q.includes("destructive")) {
+    return {
+      answer: "Wave interference occurs when two or more waves overlap in the same medium. By the Principle of Superposition, the net displacement at any point is the algebraic sum of the individual wave displacements: y_res = y₁ + y₂. If waves are in-phase (Δφ = 0, 2π...), their crests align for Constructive Interference (A_max = A₁ + A₂). If out-of-phase (Δφ = π, 180°), they cancel in Destructive Interference (A_min = |A₁ - A₂|).",
+      formula: "y_{resultant}(x,t) = y_1(x,t) + y_2(x,t) = 2A \\cos(\\Delta\\phi / 2) \\sin(kx - \\omega t + \\Delta\\phi / 2)",
+      variables: [
+        { symbol: "y", name: "Wave Displacement", unit: "Meters (m)" },
+        { symbol: "A", name: "Wave Amplitude", unit: "Meters (m)" },
+        { symbol: "Δφ", name: "Phase Difference", unit: "Radians (rad)" },
+        { symbol: "f", name: "Frequency", unit: "Hertz (Hz)" }
+      ],
+      example: "Noise-cancelling headphones use destructive interference: they emit an inverted wave (Δφ = π) that cancels incoming environmental noise.",
+      steps: [
+        "1. Sum component amplitudes algebraically at each point.",
+        "2. Check phase difference: Δφ = 0 gives constructive doubling.",
+        "3. Δφ = π (180°) produces complete destructive cancellation."
+      ]
+    };
+  }
+
+  if (q.includes("optics") || q.includes("refraction") || q.includes("snell") || q.includes("reflection") || q.includes("critical angle")) {
+    return {
+      answer: "Geometric optics explains light rays at interfaces. The Law of Reflection states that the reflection angle equals the incident angle: θ_r = θ₁. Snell's Law governs refraction: n₁·sin(θ₁) = n₂·sin(θ₂). When light travels from a dense to a less dense medium (n₁ > n₂), increasing the incident angle past the critical angle θ_c = arcsin(n₂/n₁) causes Total Internal Reflection (TIR), where 100% of light reflects back with zero transmission.",
+      formula: "n_1 \\sin\\theta_1 = n_2 \\sin\\theta_2, \\quad \\theta_c = \\arcsin(n_2 / n_1)",
+      variables: [
+        { symbol: "n₁, n₂", name: "Refractive Indices of Media", unit: "Dimensionless" },
+        { symbol: "θ₁", name: "Angle of Incidence", unit: "Degrees (°) or Radians" },
+        { symbol: "θ₂", name: "Angle of Refraction", unit: "Degrees (°) or Radians" },
+        { symbol: "θ_c", name: "Critical Angle", unit: "Degrees (°)" }
+      ],
+      example: "Fiber optic cables use total internal reflection to transmit internet data through flexible glass cores without light escaping.",
+      steps: [
+        "1. Measure angles from the surface normal perpendicular to interface.",
+        "2. Use Snell's law: sin(θ₂) = (n₁ / n₂) · sin(θ₁).",
+        "3. Check for TIR if n₁ > n₂ and sin(θ₁) > n₂ / n₁."
+      ]
+    };
+  }
+
+  if (q.includes("incline") || q.includes("friction") || q.includes("ramp") || q.includes("slope") || q.includes("normal force")) {
+    return {
+      answer: "On an inclined plane tilted at angle θ, gravity breaks into two perpendicular components: F_parallel = m·g·sin(θ) down the slope, and F_normal = m·g·cos(θ) into the surface. Static friction holds the object stationary up to f_s,max = μ_s · F_N. Once tan(θ) > μ_s, the object slips and kinetic friction f_k = μ_k · F_N opposes motion, giving net downhill acceleration a = g·(sin θ - μ_k·cos θ).",
+      formula: "a = g (\\sin\\theta - \\mu_k \\cos\\theta), \\quad \\theta_c = \\arctan(\\mu_s)",
+      variables: [
+        { symbol: "θ", name: "Incline Angle", unit: "Degrees (°) or Radians" },
+        { symbol: "μ_s", name: "Static Friction Coefficient", unit: "Dimensionless" },
+        { symbol: "μ_k", name: "Kinetic Friction Coefficient", unit: "Dimensionless" },
+        { symbol: "a", name: "Downslope Acceleration", unit: "m/s²" }
+      ],
+      example: "If a ramp has μ_s = 0.50, the critical slip angle is θ_c = arctan(0.50) ≈ 26.6°. Below this angle, the block cannot slide no matter its mass.",
+      steps: [
+        "1. Calculate normal force: F_N = m·g·cos(θ).",
+        "2. Compare downhill gravity (mg sin θ) to max static friction (μ_s mg cos θ).",
+        "3. If slipping, compute acceleration: a = g·(sin θ - μ_k cos θ)."
       ]
     };
   }

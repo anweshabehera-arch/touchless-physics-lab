@@ -1233,6 +1233,43 @@ body:has(.portal-root),
   scroll-margin-top: 96px;
 }
 
+.tpl-category-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.tpl-category-tab {
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(103, 232, 249, 0.2);
+  color: var(--tpl-muted);
+  border-radius: 9999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tpl-category-tab:hover {
+  background: rgba(103, 232, 249, 0.12);
+  color: #fff;
+  border-color: rgba(103, 232, 249, 0.4);
+}
+
+.tpl-category-tab.is-active {
+  background: linear-gradient(135deg, rgba(22, 124, 255, 0.35), rgba(103, 232, 249, 0.3));
+  border-color: var(--tpl-primary);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 0 12px rgba(103, 232, 249, 0.25);
+}
+
+
 .tpl-labs-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));

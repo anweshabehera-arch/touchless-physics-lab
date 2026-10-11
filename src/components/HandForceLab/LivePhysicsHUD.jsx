@@ -6,7 +6,7 @@ export default function LivePhysicsHUD({
   activeExperimentId = 'newton',
   activeExperiment = null,
   physicsData = {},
-  // Parameter controls & callbacks
+  // Parameter controls & callbacks for core labs
   mass = 1.0,
   onMassChange,
   mass2 = 1.0,
@@ -27,7 +27,46 @@ export default function LivePhysicsHUD({
   onResetBall,
   isPaused = false,
   onTogglePause,
-  onOpenReport
+  onOpenReport,
+  // Parameter controls for New Experiments (6-10)
+  // 6. Pendulum
+  pendulumLength = 1.0,
+  onPendulumLengthChange,
+  pendulumInitAngle = 25,
+  onPendulumInitAngleChange,
+  onReleasePendulum,
+  // 7. Electric Field
+  charge1Q = 2.0,
+  onChangeCharge1Q,
+  charge2Q = -2.0,
+  onChangeCharge2Q,
+  chargeTestQ = 1.0,
+  onChangeChargeTestQ,
+  onResetCharges,
+  // 8. Wave Interference
+  waveA1 = 1.0,
+  onChangeWaveA1,
+  waveA2 = 1.0,
+  onChangeWaveA2,
+  wavePhaseDeg = 0,
+  onChangeWavePhaseDeg,
+  waveFreq = 1.0,
+  onChangeWaveFreq,
+  // 9. Reflection & Refraction
+  opticsIncidentAngle = 45,
+  onChangeOpticsIncidentAngle,
+  opticsN1 = 1.0,
+  onChangeOpticsN1,
+  opticsN2 = 1.5,
+  onChangeOpticsN2,
+  onSwapMedia,
+  // 10. Friction & Incline
+  inclineAngle = 25,
+  onChangeInclineAngle,
+  inclineMuStatic = 0.45,
+  onChangeInclineMuStatic,
+  inclineMuKinetic = 0.30,
+  onChangeInclineMuKinetic
 }) {
   const [activeTab, setActiveTab] = useState('telemetry'); // 'telemetry' | 'graph'
 
@@ -61,7 +100,29 @@ export default function LivePhysicsHUD({
     range = 0,
     maxHeight = 0,
     flightTime = 0,
-    isAirborne = false
+    isAirborne = false,
+    // Pendulum-specific
+    thetaDeg = 0,
+    omega = 0,
+    pendulumPeriod = 2.01,
+    rodTension = 9.8,
+    // Electric-specific
+    eFieldMag = 0,
+    testChargeForce = 0,
+    probeDist = 0,
+    // Wave-specific
+    waveResultantAmp = 2.0,
+    waveRegime = 'constructive',
+    // Optics-specific
+    thetaReflectDeg = 45,
+    thetaRefractDeg = 28.1,
+    criticalAngleDeg = 41.8,
+    isTIR = false,
+    // Incline-specific
+    inclineNormal = 8.88,
+    inclineFriction = 4.14,
+    inclineAccel = 0,
+    inclineSlipping = false
   } = physicsData || {};
 
   return (
@@ -166,7 +227,6 @@ export default function LivePhysicsHUD({
                   ))}
                 </div>
 
-                {/* Manual Applied Force Slider (Alternative to Hand Gesture) */}
                 {onAppliedForceManualChange && (
                   <>
                     <div className="mass-label-row" style={{ marginTop: '10px' }}>
@@ -390,7 +450,6 @@ export default function LivePhysicsHUD({
                 </div>
               </div>
 
-              {/* Collision Type Toggle */}
               <div className="mass-control-group">
                 <div className="mass-label-row">
                   <span>COLLISION RESTITUTION:</span>
@@ -557,6 +616,547 @@ export default function LivePhysicsHUD({
                   🚀 Fire Cannon (or Quick Flick)
                 </button>
               )}
+            </>
+          )}
+
+          {/* =========================================================
+              MODE 6: SIMPLE PENDULUM (NEW)
+              ========================================================= */}
+          {activeExperimentId === 'pendulum' && (
+            <>
+              <div className="live-data-grid">
+                <div className="data-tile tile-mass">
+                  <span>ROD LENGTH (L)</span>
+                  <strong>{Number(pendulumLength).toFixed(2)} m</strong>
+                </div>
+
+                <div className="data-tile tile-mass">
+                  <span>BOB MASS (m)</span>
+                  <strong>{Number(mass).toFixed(2)} kg</strong>
+                </div>
+
+                <div className="data-tile tile-accel">
+                  <span>ANGLE (θ)</span>
+                  <strong>{Number(thetaDeg).toFixed(1)}°</strong>
+                </div>
+
+                <div className="data-tile tile-vel">
+                  <span>ANGULAR SPEED (|ω|)</span>
+                  <strong>{Math.abs(Number(omega)).toFixed(2)} rad/s</strong>
+                </div>
+
+                <div className="data-tile tile-vel">
+                  <span>TANGENTIAL VEL</span>
+                  <strong>{Number(velocity).toFixed(2)} m/s</strong>
+                </div>
+
+                <div className="data-tile tile-force">
+                  <span>ROD TENSION (T)</span>
+                  <strong>{Number(rodTension).toFixed(2)} N</strong>
+                </div>
+
+                <div className="data-tile wide">
+                  <span>THEORETICAL PERIOD (T₀)</span>
+                  <strong style={{ color: '#31f2a1' }}>
+                    T₀ = 2π√(L/g) = {Number(pendulumPeriod).toFixed(2)} s
+                  </strong>
+                </div>
+              </div>
+
+              <div className="mass-control-group">
+                <div className="mass-label-row">
+                  <span>ROD LENGTH (L):</span>
+                  <strong>{Number(pendulumLength).toFixed(2)} m</strong>
+                </div>
+                <input
+                  type="range"
+                  min="0.4"
+                  max="1.8"
+                  step="0.05"
+                  className="mass-slider"
+                  value={pendulumLength}
+                  onChange={(e) => onPendulumLengthChange?.(parseFloat(e.target.value))}
+                />
+
+                <div className="mass-label-row" style={{ marginTop: '8px' }}>
+                  <span>BOB MASS (m):</span>
+                  <strong>{Number(mass).toFixed(1)} kg</strong>
+                </div>
+                <input
+                  type="range"
+                  min="0.2"
+                  max="4.0"
+                  step="0.2"
+                  className="mass-slider"
+                  value={mass}
+                  onChange={(e) => onMassChange?.(parseFloat(e.target.value))}
+                />
+
+                <div className="mass-label-row" style={{ marginTop: '8px' }}>
+                  <span>INITIAL ANGLE (θ₀):</span>
+                  <strong>{Number(pendulumInitAngle).toFixed(0)}°</strong>
+                </div>
+                <input
+                  type="range"
+                  min="-60"
+                  max="60"
+                  step="5"
+                  className="mass-slider"
+                  value={pendulumInitAngle}
+                  onChange={(e) => onPendulumInitAngleChange?.(parseFloat(e.target.value))}
+                />
+
+                {onReleasePendulum && (
+                  <button
+                    type="button"
+                    className="btn-hud-action btn-fire"
+                    onClick={onReleasePendulum}
+                    style={{ width: '100%', marginTop: '10px' }}
+                  >
+                    ⏱️ Release Pendulum from Initial θ₀
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* =========================================================
+              MODE 7: ELECTRIC FIELD AND CHARGES (NEW)
+              ========================================================= */}
+          {activeExperimentId === 'electric' && (
+            <>
+              <div className="live-data-grid">
+                <div className="data-tile tile-force">
+                  <span>PROBE FIELD (|E|)</span>
+                  <strong>{Number(eFieldMag).toFixed(1)} N/C</strong>
+                </div>
+
+                <div className="data-tile tile-vel">
+                  <span>PROBE FORCE (|F|)</span>
+                  <strong>{Number(testChargeForce).toFixed(2)} N</strong>
+                </div>
+
+                <div className="data-tile tile-accel">
+                  <span>PROBE DIST (r)</span>
+                  <strong>{Number(probeDist).toFixed(2)} m</strong>
+                </div>
+
+                <div className="data-tile tile-mass">
+                  <span>TEST CHARGE (q₀)</span>
+                  <strong>{Number(chargeTestQ).toFixed(1)} μC</strong>
+                </div>
+
+                <div className="data-tile">
+                  <span>SOURCE Q₁</span>
+                  <strong style={{ color: charge1Q > 0 ? '#38d9ff' : '#e040fb' }}>
+                    {charge1Q >= 0 ? `+${Number(charge1Q).toFixed(1)}` : Number(charge1Q).toFixed(1)} μC
+                  </strong>
+                </div>
+
+                <div className="data-tile">
+                  <span>SOURCE Q₂</span>
+                  <strong style={{ color: charge2Q > 0 ? '#38d9ff' : '#e040fb' }}>
+                    {charge2Q >= 0 ? `+${Number(charge2Q).toFixed(1)}` : Number(charge2Q).toFixed(1)} μC
+                  </strong>
+                </div>
+
+                <div className="data-tile wide">
+                  <span>GOVERNING LAW</span>
+                  <strong style={{ color: '#31f2a1' }}>
+                    Coulomb's Law: E = k_e·Σ(q_i/r_i²) (k_e = 8.99 N·m²/μC²)
+                  </strong>
+                </div>
+              </div>
+
+              <div className="mass-control-group">
+                <div className="mass-label-row">
+                  <span>SOURCE CHARGE 1 (q₁):</span>
+                  <strong>{charge1Q >= 0 ? `+${Number(charge1Q).toFixed(1)}` : Number(charge1Q).toFixed(1)} μC</strong>
+                </div>
+                <input
+                  type="range"
+                  min="-5.0"
+                  max="5.0"
+                  step="0.5"
+                  className="mass-slider"
+                  value={charge1Q}
+                  onChange={(e) => onChangeCharge1Q?.(parseFloat(e.target.value))}
+                />
+
+                <div className="mass-label-row" style={{ marginTop: '8px' }}>
+                  <span>SOURCE CHARGE 2 (q₂):</span>
+                  <strong>{charge2Q >= 0 ? `+${Number(charge2Q).toFixed(1)}` : Number(charge2Q).toFixed(1)} μC</strong>
+                </div>
+                <input
+                  type="range"
+                  min="-5.0"
+                  max="5.0"
+                  step="0.5"
+                  className="mass-slider"
+                  value={charge2Q}
+                  onChange={(e) => onChangeCharge2Q?.(parseFloat(e.target.value))}
+                />
+
+                <div className="mass-label-row" style={{ marginTop: '8px' }}>
+                  <span>PROBE TEST CHARGE (q₀):</span>
+                  <strong>{chargeTestQ >= 0 ? `+${Number(chargeTestQ).toFixed(1)}` : Number(chargeTestQ).toFixed(1)} μC</strong>
+                </div>
+                <input
+                  type="range"
+                  min="-3.0"
+                  max="3.0"
+                  step="0.5"
+                  className="mass-slider"
+                  value={chargeTestQ}
+                  onChange={(e) => onChangeChargeTestQ?.(parseFloat(e.target.value))}
+                />
+
+                {onResetCharges && (
+                  <button
+                    type="button"
+                    className="btn-hud-action"
+                    onClick={onResetCharges}
+                    style={{ width: '100%', marginTop: '10px' }}
+                  >
+                    Reset Dipole Configuration
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* =========================================================
+              MODE 8: WAVE INTERFERENCE (NEW)
+              ========================================================= */}
+          {activeExperimentId === 'wave' && (
+            <>
+              <div className="live-data-grid">
+                <div className="data-tile tile-vel">
+                  <span>WAVE 1 AMP (A₁)</span>
+                  <strong>{Number(waveA1).toFixed(2)} m</strong>
+                </div>
+
+                <div className="data-tile tile-vel">
+                  <span>WAVE 2 AMP (A₂)</span>
+                  <strong>{Number(waveA2).toFixed(2)} m</strong>
+                </div>
+
+                <div className="data-tile tile-accel">
+                  <span>PHASE SHIFT (Δφ)</span>
+                  <strong>{Number(wavePhaseDeg).toFixed(0)}° ({((wavePhaseDeg * Math.PI) / 180).toFixed(2)} rad)</strong>
+                </div>
+
+                <div className="data-tile tile-force">
+                  <span>RESULTANT AMP</span>
+                  <strong style={{ color: waveRegime === 'constructive' ? '#31f2a1' : waveRegime === 'destructive' ? '#ff6b6b' : '#38d9ff' }}>
+                    {Number(waveResultantAmp).toFixed(2)} m
+                  </strong>
+                </div>
+
+                <div className="data-tile">
+                  <span>FREQUENCY (f)</span>
+                  <strong>{Number(waveFreq).toFixed(1)} Hz</strong>
+                </div>
+
+                <div className="data-tile">
+                  <span>REGIME</span>
+                  <strong style={{ textTransform: 'uppercase', color: waveRegime === 'constructive' ? '#31f2a1' : '#ffbb33' }}>
+                    {waveRegime}
+                  </strong>
+                </div>
+
+                <div className="data-tile wide">
+                  <span>SUPERPOSITION THEOREM</span>
+                  <strong>
+                    y_res = y₁ + y₂ | A_res = √(A₁² + A₂² + 2A₁A₂ cos Δφ)
+                  </strong>
+                </div>
+              </div>
+
+              <div className="mass-control-group">
+                <div className="mass-label-row">
+                  <span>PHASE DIFFERENCE (Δφ):</span>
+                  <strong>{Number(wavePhaseDeg).toFixed(0)}°</strong>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="360"
+                  step="5"
+                  className="mass-slider"
+                  value={wavePhaseDeg}
+                  onChange={(e) => onChangeWavePhaseDeg?.(parseFloat(e.target.value))}
+                />
+                <div className="quick-mass-pills">
+                  {[0, 90, 180, 270].map((deg) => (
+                    <button
+                      key={deg}
+                      type="button"
+                      className={`mass-pill ${Math.abs(wavePhaseDeg - deg) < 4 ? 'active' : ''}`}
+                      onClick={() => onChangeWavePhaseDeg?.(deg)}
+                    >
+                      {deg}° {deg === 0 ? '(Construct)' : deg === 180 ? '(Cancel)' : ''}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mass-label-row" style={{ marginTop: '8px' }}>
+                  <span>AMPLITUDE A₁:</span>
+                  <strong>{Number(waveA1).toFixed(2)} m</strong>
+                </div>
+                <input
+                  type="range"
+                  min="0.2"
+                  max="2.0"
+                  step="0.1"
+                  className="mass-slider"
+                  value={waveA1}
+                  onChange={(e) => onChangeWaveA1?.(parseFloat(e.target.value))}
+                />
+
+                <div className="mass-label-row" style={{ marginTop: '8px' }}>
+                  <span>AMPLITUDE A₂:</span>
+                  <strong>{Number(waveA2).toFixed(2)} m</strong>
+                </div>
+                <input
+                  type="range"
+                  min="0.2"
+                  max="2.0"
+                  step="0.1"
+                  className="mass-slider"
+                  value={waveA2}
+                  onChange={(e) => onChangeWaveA2?.(parseFloat(e.target.value))}
+                />
+
+                <div className="mass-label-row" style={{ marginTop: '8px' }}>
+                  <span>WAVE FREQUENCY (f):</span>
+                  <strong>{Number(waveFreq).toFixed(1)} Hz</strong>
+                </div>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="3.0"
+                  step="0.1"
+                  className="mass-slider"
+                  value={waveFreq}
+                  onChange={(e) => onChangeWaveFreq?.(parseFloat(e.target.value))}
+                />
+              </div>
+            </>
+          )}
+
+          {/* =========================================================
+              MODE 9: REFLECTION & REFRACTION (NEW)
+              ========================================================= */}
+          {activeExperimentId === 'optics' && (
+            <>
+              <div className="live-data-grid">
+                <div className="data-tile tile-accel">
+                  <span>INCIDENT ANGLE (θ_i)</span>
+                  <strong>{Number(opticsIncidentAngle).toFixed(1)}°</strong>
+                </div>
+
+                <div className="data-tile tile-vel">
+                  <span>REFLECTED ANGLE (θ_r)</span>
+                  <strong>{Number(thetaReflectDeg).toFixed(1)}°</strong>
+                </div>
+
+                <div className="data-tile tile-force">
+                  <span>REFRACTED ANGLE (θ_t)</span>
+                  <strong style={{ color: isTIR ? '#ff6b6b' : '#31f2a1' }}>
+                    {isTIR ? 'TIR (No Ray)' : `${Number(thetaRefractDeg).toFixed(1)}°`}
+                  </strong>
+                </div>
+
+                <div className="data-tile tile-mass">
+                  <span>MEDIUM 1 (n₁)</span>
+                  <strong>{Number(opticsN1).toFixed(2)}</strong>
+                </div>
+
+                <div className="data-tile tile-mass">
+                  <span>MEDIUM 2 (n₂)</span>
+                  <strong>{Number(opticsN2).toFixed(2)}</strong>
+                </div>
+
+                <div className="data-tile">
+                  <span>CRITICAL ANGLE (θ_c)</span>
+                  <strong>{criticalAngleDeg ? `${Number(criticalAngleDeg).toFixed(1)}°` : 'None (n₁ ≤ n₂)'}</strong>
+                </div>
+
+                <div className="data-tile wide">
+                  <span>REGIME</span>
+                  <strong style={{ color: isTIR ? '#ff6b6b' : '#31f2a1' }}>
+                    {isTIR ? '🔒 TOTAL INTERNAL REFLECTION (100% Reflected)' : "✓ SNELL'S REFRACTION (n₁ sin θ_i = n₂ sin θ_t)"}
+                  </strong>
+                </div>
+              </div>
+
+              <div className="mass-control-group">
+                <div className="mass-label-row">
+                  <span>INCIDENT ANGLE (θ_i):</span>
+                  <strong>{Number(opticsIncidentAngle).toFixed(0)}°</strong>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="85"
+                  step="1"
+                  className="mass-slider"
+                  value={opticsIncidentAngle}
+                  onChange={(e) => onChangeOpticsIncidentAngle?.(parseFloat(e.target.value))}
+                />
+
+                <div className="mass-label-row" style={{ marginTop: '8px' }}>
+                  <span>MEDIUM 1 (Top):</span>
+                  <strong>{opticsN1 === 1.0 ? 'Air (1.00)' : opticsN1 === 1.33 ? 'Water (1.33)' : opticsN1 === 1.5 ? 'Glass (1.50)' : 'Diamond (2.42)'}</strong>
+                </div>
+                <div className="quick-mass-pills">
+                  {[1.0, 1.33, 1.5, 2.42].map((idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`mass-pill ${Math.abs(opticsN1 - idx) < 0.05 ? 'active' : ''}`}
+                      onClick={() => onChangeOpticsN1?.(idx)}
+                    >
+                      {idx === 1.0 ? 'Air' : idx === 1.33 ? 'Water' : idx === 1.5 ? 'Glass' : 'Dia'}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mass-label-row" style={{ marginTop: '8px' }}>
+                  <span>MEDIUM 2 (Bottom):</span>
+                  <strong>{opticsN2 === 1.0 ? 'Air (1.00)' : opticsN2 === 1.33 ? 'Water (1.33)' : opticsN2 === 1.5 ? 'Glass (1.50)' : 'Diamond (2.42)'}</strong>
+                </div>
+                <div className="quick-mass-pills">
+                  {[1.0, 1.33, 1.5, 2.42].map((idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`mass-pill ${Math.abs(opticsN2 - idx) < 0.05 ? 'active' : ''}`}
+                      onClick={() => onChangeOpticsN2?.(idx)}
+                    >
+                      {idx === 1.0 ? 'Air' : idx === 1.33 ? 'Water' : idx === 1.5 ? 'Glass' : 'Dia'}
+                    </button>
+                  ))}
+                </div>
+
+                {onSwapMedia && (
+                  <button
+                    type="button"
+                    className="btn-hud-action"
+                    onClick={onSwapMedia}
+                    style={{ width: '100%', marginTop: '10px' }}
+                  >
+                    🔄 Swap Medium 1 & Medium 2
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* =========================================================
+              MODE 10: FRICTION & INCLINED PLANE (NEW)
+              ========================================================= */}
+          {activeExperimentId === 'incline' && (
+            <>
+              <div className="live-data-grid">
+                <div className="data-tile tile-accel">
+                  <span>RAMP ANGLE (θ)</span>
+                  <strong>{Number(inclineAngle).toFixed(1)}°</strong>
+                </div>
+
+                <div className="data-tile tile-mass">
+                  <span>OBJECT MASS (m)</span>
+                  <strong>{Number(mass).toFixed(2)} kg</strong>
+                </div>
+
+                <div className="data-tile tile-force">
+                  <span>NORMAL FORCE (N)</span>
+                  <strong>{Number(inclineNormal).toFixed(2)} N</strong>
+                </div>
+
+                <div className="data-tile tile-force">
+                  <span>FRICTION FORCE (f)</span>
+                  <strong>{Number(inclineFriction).toFixed(2)} N</strong>
+                </div>
+
+                <div className="data-tile tile-vel">
+                  <span>DOWNHILL ACCEL (a)</span>
+                  <strong style={{ color: inclineSlipping ? '#ffbb33' : '#31f2a1' }}>
+                    {Number(inclineAccel).toFixed(2)} m/s²
+                  </strong>
+                </div>
+
+                <div className="data-tile">
+                  <span>ANGLE OF REPOSE (θ_c)</span>
+                  <strong>{(Math.atan(inclineMuStatic) * 180 / Math.PI).toFixed(1)}°</strong>
+                </div>
+
+                <div className="data-tile wide">
+                  <span>EQUILIBRIUM STATE</span>
+                  <strong style={{ color: inclineSlipping ? '#ffbb33' : '#31f2a1' }}>
+                    {inclineSlipping ? '⚡ SLIPPING DOWNHILL (Kinetic Friction f_k)' : '🔒 STATIC EQUILIBRIUM (f_s balances gravity)'}
+                  </strong>
+                </div>
+              </div>
+
+              <div className="mass-control-group">
+                <div className="mass-label-row">
+                  <span>SLOPE ANGLE (θ):</span>
+                  <strong>{Number(inclineAngle).toFixed(0)}°</strong>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="60"
+                  step="1"
+                  className="mass-slider"
+                  value={inclineAngle}
+                  onChange={(e) => onChangeInclineAngle?.(parseFloat(e.target.value))}
+                />
+
+                <div className="mass-label-row" style={{ marginTop: '8px' }}>
+                  <span>STATIC FRICTION (μ_s):</span>
+                  <strong>{Number(inclineMuStatic).toFixed(2)}</strong>
+                </div>
+                <input
+                  type="range"
+                  min="0.10"
+                  max="0.80"
+                  step="0.05"
+                  className="mass-slider"
+                  value={inclineMuStatic}
+                  onChange={(e) => onChangeInclineMuStatic?.(parseFloat(e.target.value))}
+                />
+
+                <div className="mass-label-row" style={{ marginTop: '8px' }}>
+                  <span>KINETIC FRICTION (μ_k):</span>
+                  <strong>{Number(inclineMuKinetic).toFixed(2)}</strong>
+                </div>
+                <input
+                  type="range"
+                  min="0.05"
+                  max="0.60"
+                  step="0.05"
+                  className="mass-slider"
+                  value={inclineMuKinetic}
+                  onChange={(e) => onChangeInclineMuKinetic?.(parseFloat(e.target.value))}
+                />
+
+                <div className="mass-label-row" style={{ marginTop: '8px' }}>
+                  <span>BLOCK MASS (m):</span>
+                  <strong>{Number(mass).toFixed(1)} kg</strong>
+                </div>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="5.0"
+                  step="0.5"
+                  className="mass-slider"
+                  value={mass}
+                  onChange={(e) => onMassChange?.(parseFloat(e.target.value))}
+                />
+              </div>
             </>
           )}
         </div>

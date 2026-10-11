@@ -79,6 +79,32 @@ export default function GuidedExperimentPanel({
       conditionMet = Boolean(physicsData.isAirborne) || (physicsData.range || 0) > 0;
     } else if (checkType === 'complementary') {
       conditionMet = true;
+    } else if (checkType === 'length') {
+      conditionMet = (physicsData.pendulumLength || 1.0) >= 1.3 || (physicsData.pendulumPeriod || 0) > 2.2;
+    } else if (checkType === 'addCharge') {
+      conditionMet = Boolean((physicsData.chargesCount || 1) >= 2) || (physicsData.charge2Q || 0) < 0;
+    } else if (checkType === 'probeMove') {
+      conditionMet = Boolean(physicsData.probeMoved) || (physicsData.testChargeForce || 0) > 0.05;
+    } else if (checkType === 'inverseSquare') {
+      conditionMet = (physicsData.probeDist || 0) >= 0.5 || (physicsData.eFieldMag || 0) > 0;
+    } else if (checkType === 'destructive') {
+      conditionMet = Math.abs((physicsData.wavePhaseDeg || 0) - 180) < 25 || physicsData.waveRegime === 'destructive';
+    } else if (checkType === 'unequalAmp') {
+      conditionMet = Math.abs((physicsData.waveA1 || 1.0) - (physicsData.waveA2 || 1.0)) > 0.3;
+    } else if (checkType === 'intermediate') {
+      conditionMet = Math.abs((physicsData.wavePhaseDeg || 0) - 90) < 25;
+    } else if (checkType === 'refract') {
+      conditionMet = Boolean(physicsData.thetaRefractDeg && physicsData.thetaRefractDeg > 0);
+    } else if (checkType === 'swapMedia') {
+      conditionMet = Boolean((physicsData.n1 || 1.0) > (physicsData.n2 || 1.0));
+    } else if (checkType === 'tir') {
+      conditionMet = Boolean(physicsData.isTIR);
+    } else if (checkType === 'approachCrit') {
+      conditionMet = (physicsData.inclineAngle || 0) >= 20;
+    } else if (checkType === 'slip') {
+      conditionMet = Boolean(physicsData.inclineSlipping) || (physicsData.inclineAccel || 0) > 0.1;
+    } else if (checkType === 'varyMu') {
+      conditionMet = (physicsData.muStatic || 0.45) < 0.3;
     }
 
     if (conditionMet) {

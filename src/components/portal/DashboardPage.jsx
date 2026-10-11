@@ -117,33 +117,111 @@ export default function DashboardPage() {
   const [open, setOpen] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
   const [activeReportData, setActiveReportData] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState("All");
 
   // Dynamic statistics derived strictly from current user's isolated records
   const stats = getExperimentStats(userKey);
 
+  const getExperimentSamples = (expId) => {
+    switch (expId) {
+      case 'newton':
+        return [
+          { parameter: "Applied Net Force (F)", value: "3.50 N", theoretical: "3.50 N", deviation: "0.0%" },
+          { parameter: "Inertial Mass (m)", value: "1.00 kg", theoretical: "1.00 kg", deviation: "0.0%" },
+          { parameter: "Measured Acceleration (a)", value: "3.50 m/s²", theoretical: "3.50 m/s²", deviation: "0.0%" },
+          { parameter: "System Momentum (p)", value: "3.50 kg·m/s", theoretical: "3.50 kg·m/s", deviation: "0.0%" }
+        ];
+      case 'impulse':
+        return [
+          { parameter: "Average Force (F_avg)", value: "5.00 N", theoretical: "5.00 N", deviation: "0.0%" },
+          { parameter: "Impact Duration (Δt)", value: "0.40 s", theoretical: "0.40 s", deviation: "0.0%" },
+          { parameter: "Impulse (J = F·Δt)", value: "2.00 N·s", theoretical: "2.00 N·s", deviation: "0.0%" },
+          { parameter: "Momentum Change (Δp)", value: "2.00 kg·m/s", theoretical: "2.00 kg·m/s", deviation: "0.0%" }
+        ];
+      case 'hooke':
+        return [
+          { parameter: "Spring Constant (k)", value: "25.0 N/m", theoretical: "25.0 N/m", deviation: "0.0%" },
+          { parameter: "Displacement (Δx)", value: "0.12 m", theoretical: "0.12 m", deviation: "0.0%" },
+          { parameter: "Restoring Force (-k·x)", value: "-3.00 N", theoretical: "-3.00 N", deviation: "0.0%" },
+          { parameter: "Elastic Potential (U_s)", value: "0.180 J", theoretical: "0.180 J", deviation: "0.0%" }
+        ];
+      case 'collision':
+        return [
+          { parameter: "Cart 1 Initial Momentum", value: "2.00 kg·m/s", theoretical: "2.00 kg·m/s", deviation: "0.0%" },
+          { parameter: "Cart 2 Initial Momentum", value: "0.00 kg·m/s", theoretical: "0.00 kg·m/s", deviation: "0.0%" },
+          { parameter: "Total Initial Momentum", value: "2.00 kg·m/s", theoretical: "2.00 kg·m/s", deviation: "0.0%" },
+          { parameter: "Total Final Momentum", value: "2.00 kg·m/s", theoretical: "2.00 kg·m/s", deviation: "0.0%" }
+        ];
+      case 'projectile':
+        return [
+          { parameter: "Launch Velocity (v₀)", value: "12.0 m/s", theoretical: "12.0 m/s", deviation: "0.0%" },
+          { parameter: "Launch Angle (θ)", value: "45.0°", theoretical: "45.0°", deviation: "0.0%" },
+          { parameter: "Horizontal Range (R)", value: "14.69 m", theoretical: "14.69 m", deviation: "0.0%" },
+          { parameter: "Apex Height (H_max)", value: "3.67 m", theoretical: "3.67 m", deviation: "0.0%" }
+        ];
+      case 'pendulum':
+        return [
+          { parameter: "Suspension Length (L)", value: "1.00 m", theoretical: "1.00 m", deviation: "0.0%" },
+          { parameter: "Bob Mass (m)", value: "0.50 kg", theoretical: "0.50 kg", deviation: "0.0%" },
+          { parameter: "Initial Angle (θ₀)", value: "15.0°", theoretical: "15.0°", deviation: "0.0%" },
+          { parameter: "Small-Angle Period (T)", value: "2.007 s", theoretical: "2.007 s", deviation: "0.0%" }
+        ];
+      case 'electric':
+        return [
+          { parameter: "Source Charge q₁", value: "+3.00 μC", theoretical: "+3.00 μC", deviation: "0.0%" },
+          { parameter: "Source Charge q₂", value: "-3.00 μC", theoretical: "-3.00 μC", deviation: "0.0%" },
+          { parameter: "Probe Distance (r)", value: "0.50 m", theoretical: "0.50 m", deviation: "0.0%" },
+          { parameter: "Net Field Strength (|E|)", value: "1.08×10⁵ N/C", theoretical: "1.08×10⁵ N/C", deviation: "0.0%" }
+        ];
+      case 'wave':
+        return [
+          { parameter: "Wave 1 Amplitude (A₁)", value: "1.50 m", theoretical: "1.50 m", deviation: "0.0%" },
+          { parameter: "Wave 2 Amplitude (A₂)", value: "1.50 m", theoretical: "1.50 m", deviation: "0.0%" },
+          { parameter: "Phase Difference (Δφ)", value: "0.00 rad", theoretical: "0.00 rad", deviation: "0.0%" },
+          { parameter: "Superposition Peak (A_res)", value: "3.00 m", theoretical: "3.00 m", deviation: "0.0%" }
+        ];
+      case 'optics':
+        return [
+          { parameter: "Incident Angle (θ₁)", value: "30.0°", theoretical: "30.0°", deviation: "0.0%" },
+          { parameter: "Reflected Angle (θ_r)", value: "30.0°", theoretical: "30.0°", deviation: "0.0%" },
+          { parameter: "Refractive Indices (n₁ / n₂)", value: "1.000 / 1.500", theoretical: "1.000 / 1.500", deviation: "0.0%" },
+          { parameter: "Refracted Angle (θ₂)", value: "19.47°", theoretical: "19.47°", deviation: "0.0%" }
+        ];
+      case 'incline':
+        return [
+          { parameter: "Inclination Angle (θ)", value: "30.0°", theoretical: "30.0°", deviation: "0.0%" },
+          { parameter: "Block Mass (m)", value: "2.00 kg", theoretical: "2.00 kg", deviation: "0.0%" },
+          { parameter: "Static Threshold (tan θ vs μ_s)", value: "0.577 > 0.400", theoretical: "Slipping", deviation: "0.0%" },
+          { parameter: "Downslope Accel (a_net)", value: "2.36 m/s²", theoretical: "2.36 m/s²", deviation: "0.0%" }
+        ];
+      default:
+        return [
+          { parameter: "Applied Input", value: "1.00", theoretical: "1.00", deviation: "0.0%" }
+        ];
+    }
+  };
+
   const openReportForExp = (expId, record = null) => {
     const expConfig = EXPERIMENT_LIST.find((e) => e.id === expId) || EXPERIMENT_LIST[0];
     const rec = record || stats.history.find((h) => (h.experimentId === expId || h.id === expId));
+    const scoreVal = rec?.score !== undefined ? rec.score : null;
     
     setActiveReportData({
       experimentId: expConfig.id,
       experimentTitle: expConfig.title,
       userName: firstName || "Student Investigator",
       userEmail: session?.email || "anonymous@lab.local",
-      score: rec?.score ?? 100,
+      score: scoreVal,
       totalQuestions: 4,
       date: rec?.date || new Date().toISOString(),
       formula: expConfig.primaryFormula,
       objective: expConfig.objective,
       prerequisites: expConfig.prerequisites,
       assumptions: expConfig.assumptions,
-      samples: [
-        { parameter: "Applied Force / Input", value: "3.50 N", theoretical: "3.50 N", deviation: "0.0%" },
-        { parameter: "Inertial Mass", value: "1.00 kg", theoretical: "1.00 kg", deviation: "0.0%" },
-        { parameter: "Resulting Acceleration", value: "3.50 m/s²", theoretical: "3.50 m/s²", deviation: "0.0%" },
-        { parameter: "Kinetic Momentum", value: "3.50 kg·m/s", theoretical: "3.50 kg·m/s", deviation: "0.0%" }
-      ],
-      aiNotes: `Empirical observations confirm ${expConfig.primaryFormula}. Investigator successfully completed laboratory verification with an assessment score of ${rec?.score ?? 100}%.`
+      samples: getExperimentSamples(expConfig.id),
+      aiNotes: scoreVal !== null
+        ? `Empirical laboratory observations confirm ${expConfig.primaryFormula}. Investigator completed laboratory verification with an assessment score of ${scoreVal}%.`
+        : `Empirical laboratory session recorded for ${expConfig.title}. Formal quiz assessment is currently pending.`
     });
   };
 
@@ -184,6 +262,10 @@ export default function DashboardPage() {
   ];
 
   const currentExperiment = EXPERIMENT_LIST[0]; // Newton's 2nd Law
+  const CATEGORIES = ["All", "Mechanics", "Electromagnetism", "Waves & Optics"];
+  const filteredLabs = selectedCategory === "All"
+    ? EXPERIMENT_LIST
+    : EXPERIMENT_LIST.filter((exp) => exp.category === selectedCategory);
 
   const logout = () => {
     clearSession();
@@ -323,15 +405,34 @@ export default function DashboardPage() {
         </section>
 
         {/* =========================================================
-            ALL 5 PHYSICS LABS CATALOG
+            ALL 10 PHYSICS LABS CATALOG
             ========================================================= */}
         <section id="experiments" className="tpl-glass tpl-all-labs tpl-rise" style={{ animationDelay: "320ms" }}>
           <div className="tpl-section-head">
             <h2>Interactive Physics Laboratories</h2>
-            <span>5 Interactive Modules</span>
+            <span>{filteredLabs.length} of {EXPERIMENT_LIST.length} Modules</span>
           </div>
+
+          <div className="tpl-category-tabs" role="tablist" aria-label="Experiment Categories">
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                role="tab"
+                aria-selected={selectedCategory === cat}
+                className={`tpl-category-tab ${selectedCategory === cat ? 'is-active' : ''}`}
+                onClick={() => setSelectedCategory(cat)}
+              >
+                {cat === 'All' ? '🌐 All Labs' : cat === 'Mechanics' ? '⚙️ Mechanics' : cat === 'Electromagnetism' ? '⚡ Electromagnetism' : '🌊 Waves & Optics'}
+                <span style={{ opacity: 0.7, fontSize: '10px' }}>
+                  ({cat === 'All' ? EXPERIMENT_LIST.length : EXPERIMENT_LIST.filter(e => e.category === cat).length})
+                </span>
+              </button>
+            ))}
+          </div>
+
           <div className="tpl-labs-grid">
-            {EXPERIMENT_LIST.map((exp) => {
+            {filteredLabs.map((exp) => {
               const record = stats.history.find(h => h.experimentId === exp.id && h.status === 'completed');
               const inProg = stats.history.find(h => h.experimentId === exp.id && h.status === 'in-progress');
               const isCompleted = Boolean(record);

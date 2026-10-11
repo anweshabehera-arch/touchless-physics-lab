@@ -1,5 +1,4 @@
-import React from 'react';
-import { BookOpen, Hand, Check, Sparkles, ArrowRight } from 'lucide-react';
+import { Hand, Check, Sparkles } from 'lucide-react';
 
 export default function HowToPerformModal({ experiment, isOpen, onClose }) {
   if (!isOpen || !experiment) return null;

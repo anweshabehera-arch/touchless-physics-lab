@@ -18,7 +18,9 @@ export function getAllUsers() {
         return parsed;
       }
     }
-  } catch (_) {}
+  } catch {
+    // ignore parse error
+  }
 
   // Check legacy single user in STORAGE_KEY
   try {
@@ -34,7 +36,9 @@ export function getAllUsers() {
         }
       }
     }
-  } catch (_) {}
+  } catch {
+    // ignore legacy parse error
+  }
 
   return users;
 }
@@ -63,7 +67,9 @@ export function getLegacyAccountEmail() {
         return email;
       }
     }
-  } catch (_) {}
+  } catch {
+    // ignore storage read error
+  }
 
   return null;
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { getPhysicsHint } from '../../services/physicsAI';
 
 const PRESET_PROBLEMS = [

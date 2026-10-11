@@ -1,4 +1,3 @@
-import React from 'react';
 
 export default function RealTimeExplanation({ explanation, formulaTag }) {
   if (!explanation) return null;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import './PhysicsAssistant.css';
 import VoiceControls from './VoiceControls';
 import ExperimentGuide from './ExperimentGuide';
@@ -27,9 +27,6 @@ export default function PhysicsAssistant({ getLabSnapshot, activeExperiment }) {
   const [currentResponse, setCurrentResponse] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
-  // Reference for reading aloud
-  const voiceControlsRef = useRef(null);
 
   // Check backend server health with backoff retry strategy and proper cleanup
   useEffect(() => {

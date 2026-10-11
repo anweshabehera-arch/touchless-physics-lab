@@ -47,7 +47,7 @@ async function apiRequest(endpoint, options = {}) {
         return await fallbackRes.json();
       }
       const errorData = await fallbackRes.json().catch(() => ({}));
-      throw new Error(errorData.error || `Backend responded with status ${fallbackRes.status}`);
+      throw new Error(errorData.error || `Backend responded with status ${fallbackRes.status}`, { cause: primaryErr });
     } catch (fallbackErr) {
       if (options.signal?.aborted || fallbackErr?.name === 'AbortError') {
         throw fallbackErr;
@@ -57,7 +57,8 @@ async function apiRequest(endpoint, options = {}) {
         console.error('API Request failed:', primaryErr, fallbackErr);
       }
       throw new Error(
-        'AI Server unavailable. Please ensure the backend server is running on port 5000 (run `node server/index.js`).'
+        'AI Server unavailable. Please ensure the backend server is running on port 5000 (run `node server/index.js`).',
+        { cause: fallbackErr }
       );
     }
   }

@@ -19,8 +19,20 @@ const frontend = spawn('npx', ['vite'], {
 });
 
 const cleanup = () => {
-  try { backend.kill(); } catch (_) {}
-  try { frontend.kill(); } catch (_) {}
+  try {
+    backend.kill();
+  } catch (err) {
+    if (err.code !== 'ESRCH') {
+      console.warn('Notice: Error terminating backend process:', err.message);
+    }
+  }
+  try {
+    frontend.kill();
+  } catch (err) {
+    if (err.code !== 'ESRCH') {
+      console.warn('Notice: Error terminating frontend process:', err.message);
+    }
+  }
   process.exit();
 };
 

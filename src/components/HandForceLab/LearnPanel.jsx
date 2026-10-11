@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 
 const EXPERIMENT_DEFINITIONS = {
   newton: [
@@ -35,6 +35,41 @@ const EXPERIMENT_DEFINITIONS = {
     { term: 'HORIZONTAL RANGE', def: 'Maximum horizontal distance traveled: R = (v₀² sin 2θ) / g.' },
     { term: 'APEX HEIGHT (H)', def: 'Maximum vertical altitude reached where vertical velocity v_y = 0.' },
     { term: 'GRAVITY (g)', def: 'Constant downward acceleration toward Earth (9.80 m/s²).' }
+  ],
+  pendulum: [
+    { term: 'PENDULUM PERIOD (T)', def: 'Time for one complete oscillation: T₀ = 2π√(L/g) for small angles.' },
+    { term: 'LENGTH (L)', def: 'Distance from pivot to center of mass of the bob.' },
+    { term: 'SMALL-ANGLE APPROX', def: 'sin(θ) ≈ θ holds within θ ≤ 15° (0.26 rad); larger angles elongate period.' },
+    { term: 'RESTORING TORQUE', def: 'Gravitational restoring component τ = -mgL sin(θ) directed toward vertical.' },
+    { term: 'ROD TENSION', def: 'Centripetal and gravitational tension: T = m(g cos θ + v²/L).' }
+  ],
+  electric: [
+    { term: 'ELECTRIC FIELD (E)', def: 'Force exerted per unit positive test charge: E = F / q_test (in N/C).' },
+    { term: "COULOMB'S LAW", def: 'Electrostatic force between point charges: F = k_e · |q₁q₂| / r².' },
+    { term: 'SUPERPOSITION', def: 'Total electric field is the vector sum of fields from each individual charge.' },
+    { term: 'INVERSE-SQUARE LAW', def: 'Field strength dilutes with distance squared (E ∝ 1/r²).' },
+    { term: 'ELECTRIC DIPOLE', def: 'Pair of equal and opposite charges separated by distance d.' }
+  ],
+  wave: [
+    { term: 'SUPERPOSITION', def: 'Resultant displacement equals pointwise algebraic sum: y_res = y₁ + y₂.' },
+    { term: 'CONSTRUCTIVE', def: 'In-phase waves (Δφ = 0, 2π) reinforce, maximizing resultant amplitude.' },
+    { term: 'DESTRUCTIVE', def: 'Out-of-phase waves (Δφ = π) oppose, canceling resultant amplitude.' },
+    { term: 'PHASE DIFFERENCE (Δφ)', def: 'Angular shift between corresponding wave cycles in radians or degrees.' },
+    { term: 'WAVE NODES', def: 'Spatial points experiencing persistent zero displacement.' }
+  ],
+  optics: [
+    { term: "SNELL'S LAW", def: 'Governs beam refraction across media: n₁ sin(θ_i) = n₂ sin(θ_t).' },
+    { term: 'LAW OF REFLECTION', def: 'Angle of reflection equals angle of incidence: θ_r = θ_i.' },
+    { term: 'REFRACTIVE INDEX (n)', def: 'Ratio of vacuum light speed to medium speed: n = c / v.' },
+    { term: 'CRITICAL ANGLE (θ_c)', def: 'Incident angle causing 90° refraction: θ_c = arcsin(n₂ / n₁) (n₁ > n₂).' },
+    { term: 'TOTAL INTERNAL REFL', def: '100% reflection with zero transmission when θ_i > θ_c.' }
+  ],
+  incline: [
+    { term: 'NORMAL FORCE (N)', def: 'Perpendicular contact force supporting object: N = mg cos(θ).' },
+    { term: 'STATIC FRICTION (f_s)', def: 'Self-adjusting friction resisting slipping: f_s ≤ μ_s N.' },
+    { term: 'KINETIC FRICTION (f_k)', def: 'Retarding force during sliding: f_k = μ_k N.' },
+    { term: 'ANGLE OF REPOSE', def: 'Critical slope angle for slip onset: tan(θ_c) = μ_s.' },
+    { term: 'NET ACCELERATION', def: 'Downhill acceleration: a = g(sin θ - μ_k cos θ) when θ > θ_c.' }
   ]
 };
 

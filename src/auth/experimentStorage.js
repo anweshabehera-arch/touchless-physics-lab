@@ -1,4 +1,5 @@
 import { getCurrentUserKey, getLegacyAccountEmail, getAllUsers } from "./authStorage.js";
+import { EXPERIMENT_LIST } from "../data/experimentsData.js";
 
 const LEGACY_HISTORY_KEY = "touchless_physics_experiment_history";
 const MIGRATION_DONE_KEY = "touchless_physics_legacy_migrated";
@@ -41,7 +42,9 @@ export function migrateLegacyHistoryOnce() {
     // Mark migration completed and REMOVE legacy shared key forever
     localStorage.setItem(MIGRATION_DONE_KEY, legacyOwnerEmail);
     localStorage.removeItem(LEGACY_HISTORY_KEY);
-  } catch (_) {}
+  } catch {
+    // Ignore migration parsing errors
+  }
 }
 
 /**
@@ -59,7 +62,9 @@ export function sanitizeNonOwnerAccounts() {
     if (ownerData) {
       try {
         ownerRecords = JSON.parse(ownerData);
-      } catch (_) {}
+      } catch {
+        // Fallback to empty array
+      }
     }
 
     const users = getAllUsers();
@@ -85,9 +90,13 @@ export function sanitizeNonOwnerAccounts() {
             localStorage.setItem(userStorageKey, JSON.stringify([]));
           }
         }
-      } catch (_) {}
+      } catch {
+        // Ignore user record parse error
+      }
     });
-  } catch (_) {}
+  } catch {
+    // Ignore overall sanitization errors
+  }
 }
 
 // Run one-time migration and sanitization immediately upon module load
@@ -102,7 +111,9 @@ export function initializeUserProgress(userIdentifier) {
   const storageKey = getUserStorageKey(userIdentifier);
   try {
     localStorage.setItem(storageKey, JSON.stringify([]));
-  } catch (_) {}
+  } catch {
+    // Ignore storage errors
+  }
 }
 
 /**
@@ -136,13 +147,15 @@ export function getExperimentHistory(userIdentifier = null) {
                   return [];
                 }
               }
-            } catch (_) {}
+            } catch {
+              // Ignore owner parse error
+            }
           }
         }
         return parsed;
       }
       return [];
-    } catch (_) {
+    } catch {
       return [];
     }
   }
@@ -150,7 +163,9 @@ export function getExperimentHistory(userIdentifier = null) {
   // If no record exists for this user, initialize to empty []
   try {
     localStorage.setItem(storageKey, JSON.stringify([]));
-  } catch (_) {}
+  } catch {
+    // Ignore storage write error
+  }
   return [];
 }
 
@@ -185,7 +200,9 @@ export function saveExperimentResult(result, userIdentifier = null) {
       storageKey,
       JSON.stringify(filtered.slice(0, 50))
     );
-  } catch (_) {}
+  } catch {
+    // Ignore storage quota error
+  }
 
   return newResult;
 }
@@ -208,6 +225,7 @@ export function getExperimentStats(userIdentifier = null) {
   const history = getExperimentHistory(userIdentifier);
   const completed = history.filter((h) => h.status === "completed");
 
+  const totalExperiments = EXPERIMENT_LIST.length || 10;
   const completedCount = completed.length;
   const totalScores = completed.reduce((acc, c) => acc + (c.score || 0), 0);
   const averageScore = completedCount > 0 ? Math.round(totalScores / completedCount) : 0;
@@ -215,7 +233,7 @@ export function getExperimentStats(userIdentifier = null) {
 
   // Unique completed experiments
   const uniqueCompleted = new Set(completed.map((c) => c.experimentId)).size;
-  const overallProgress = Math.min(100, Math.round((uniqueCompleted / 5) * 100));
+  const overallProgress = Math.min(100, Math.round((uniqueCompleted / totalExperiments) * 100));
 
   // Dynamic learning streak based on distinct active days
   let streak = 0;
@@ -226,7 +244,7 @@ export function getExperimentStats(userIdentifier = null) {
           .map((h) => {
             try {
               return new Date(h.date).toISOString().split("T")[0];
-            } catch (_) {
+            } catch {
               return null;
             }
           })
@@ -253,7 +271,7 @@ export function getExperimentStats(userIdentifier = null) {
   const conceptsExplored = uniqueCompleted > 0 ? uniqueCompleted * 4 : 0;
 
   return {
-    totalCount: 5,
+    totalCount: totalExperiments,
     uniqueCompleted,
     completedCount,
     averageScore,
@@ -273,5 +291,7 @@ export function clearExperimentHistory(userIdentifier = null) {
   const storageKey = getUserStorageKey(userKey);
   try {
     localStorage.setItem(storageKey, JSON.stringify([]));
-  } catch (_) {}
+  } catch {
+    // Ignore storage write error
+  }
 }

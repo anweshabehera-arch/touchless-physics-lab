@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { analyzeObservation } from '../../services/physicsAI';
 
 export default function ObservationAnalysis({
