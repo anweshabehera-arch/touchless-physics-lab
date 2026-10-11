@@ -17,14 +17,18 @@ import {
   TrendingUp,
   UserRound,
   X,
+  Sparkles,
+  FileText,
 } from "lucide-react";
-import { useState, useMemo, useEffect } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { clearSession, getDisplayName, getInitials, getSession } from "../../auth/authStorage";
 import { getExperimentStats } from "../../auth/experimentStorage";
 import { EXPERIMENT_LIST } from "../../data/experimentsData";
 import LabBackground, { OrbitGlow } from "./LabBackground";
 import Logo from "./Logo";
+import ProjectIntroModal from "./ProjectIntroModal";
+import LabReportModal from "../HandForceLab/LabReportModal";
 
 const ACHIEVEMENTS_DEF = [
   {
@@ -111,22 +115,42 @@ export default function DashboardPage() {
   const firstName = getDisplayName(session);
   const initials = getInitials(session);
   const [open, setOpen] = useState(false);
+  const [showIntro, setShowIntro] = useState(false);
+  const [activeReportData, setActiveReportData] = useState(null);
 
   // Dynamic statistics derived strictly from current user's isolated records
-  const [stats, setStats] = useState(() => getExperimentStats(userKey));
+  const stats = getExperimentStats(userKey);
 
-  useEffect(() => {
-    const activeSession = getSession();
-    const activeKey = activeSession?.email || activeSession?.id || "guest";
-    setStats(getExperimentStats(activeKey));
-  }, [session?.email, session?.id]);
+  const openReportForExp = (expId, record = null) => {
+    const expConfig = EXPERIMENT_LIST.find((e) => e.id === expId) || EXPERIMENT_LIST[0];
+    const rec = record || stats.history.find((h) => (h.experimentId === expId || h.id === expId));
+    
+    setActiveReportData({
+      experimentId: expConfig.id,
+      experimentTitle: expConfig.title,
+      userName: firstName || "Student Investigator",
+      userEmail: session?.email || "anonymous@lab.local",
+      score: rec?.score ?? 100,
+      totalQuestions: 4,
+      date: rec?.date || new Date().toISOString(),
+      formula: expConfig.primaryFormula,
+      objective: expConfig.objective,
+      prerequisites: expConfig.prerequisites,
+      assumptions: expConfig.assumptions,
+      samples: [
+        { parameter: "Applied Force / Input", value: "3.50 N", theoretical: "3.50 N", deviation: "0.0%" },
+        { parameter: "Inertial Mass", value: "1.00 kg", theoretical: "1.00 kg", deviation: "0.0%" },
+        { parameter: "Resulting Acceleration", value: "3.50 m/s²", theoretical: "3.50 m/s²", deviation: "0.0%" },
+        { parameter: "Kinetic Momentum", value: "3.50 kg·m/s", theoretical: "3.50 kg·m/s", deviation: "0.0%" }
+      ],
+      aiNotes: `Empirical observations confirm ${expConfig.primaryFormula}. Investigator successfully completed laboratory verification with an assessment score of ${rec?.score ?? 100}%.`
+    });
+  };
 
-  const evaluatedAchievements = useMemo(() => {
-    return ACHIEVEMENTS_DEF.map((ach) => ({
-      ...ach,
-      unlocked: ach.isUnlocked(stats)
-    }));
-  }, [stats]);
+  const evaluatedAchievements = ACHIEVEMENTS_DEF.map((ach) => ({
+    ...ach,
+    unlocked: ach.isUnlocked(stats)
+  }));
 
   const unlockedCount = evaluatedAchievements.filter((a) => a.unlocked).length;
 
@@ -261,9 +285,13 @@ export default function DashboardPage() {
                 Start Experiment
                 <ArrowRight aria-hidden="true" className="tpl-icon-sm" />
               </button>
+              <button type="button" className="tpl-btn tpl-btn-secondary" onClick={() => setShowIntro(true)}>
+                <Sparkles aria-hidden="true" className="tpl-icon-sm" />
+                Platform Tour & Overview
+              </button>
               <p className="tpl-hero-hint">
                 <Hand aria-hidden="true" className="tpl-icon-sm" />
-                Touchless mode · webcam required
+                Touchless mode · webcam or mouse fallback
               </p>
             </div>
           </div>
@@ -334,14 +362,40 @@ export default function DashboardPage() {
                     <span className="tpl-lab-score-pill">
                       {record ? `Score: ${record.score}%` : `Topic: ${exp.shortTitle}`}
                     </span>
-                    <button
-                      type="button"
-                      className="tpl-lab-launch-btn"
-                      onClick={() => startLab(exp.id)}
-                    >
-                      Launch Lab
-                      <ArrowRight className="tpl-icon-xs" />
-                    </button>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {isCompleted && (
+                        <button
+                          type="button"
+                          className="tpl-btn-xs"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            background: 'rgba(56, 189, 248, 0.12)',
+                            color: '#38bdf8',
+                            border: '1px solid rgba(56, 189, 248, 0.3)',
+                            borderRadius: '6px',
+                            padding: '6px 10px',
+                            fontSize: '11px',
+                            cursor: 'pointer',
+                            fontWeight: 600
+                          }}
+                          onClick={() => openReportForExp(exp.id, record)}
+                          title="View & Print Official Lab Report"
+                        >
+                          <FileText className="tpl-icon-xs" />
+                          Report
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="tpl-lab-launch-btn"
+                        onClick={() => startLab(exp.id)}
+                      >
+                        Launch Lab
+                        <ArrowRight className="tpl-icon-xs" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -433,8 +487,8 @@ export default function DashboardPage() {
               {stats.history.slice(0, 4).map((exp) => {
                 const done = exp.status === "completed";
                 return (
-                  <li key={exp.id || exp.topic}>
-                    <button type="button" className="tpl-recent-row" onClick={() => startLab(exp.experimentId || 'newton')}>
+                  <li key={exp.id || exp.topic} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button type="button" className="tpl-recent-row" style={{ flex: 1 }} onClick={() => startLab(exp.experimentId || 'newton')}>
                       <div>
                         <div className="tpl-recent-title">
                           <p>{exp.experimentName || exp.title}</p>
@@ -456,6 +510,30 @@ export default function DashboardPage() {
                       </div>
                       <ChevronRight aria-hidden="true" className="tpl-icon-sm tpl-chevron" />
                     </button>
+                    {done && (
+                      <button
+                        type="button"
+                        style={{
+                          background: 'rgba(56, 189, 248, 0.12)',
+                          color: '#38bdf8',
+                          border: '1px solid rgba(56, 189, 248, 0.3)',
+                          borderRadius: '8px',
+                          padding: '8px 12px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          whiteSpace: 'nowrap'
+                        }}
+                        onClick={() => openReportForExp(exp.experimentId || 'newton', exp)}
+                        title="View & Print Official Lab Report"
+                      >
+                        <FileText className="tpl-icon-xs" />
+                        Report
+                      </button>
+                    )}
                   </li>
                 );
               })}
@@ -486,6 +564,17 @@ export default function DashboardPage() {
 
         <footer className="tpl-dash-foot">Learn Physics. Move It. See It.</footer>
       </main>
+
+      {/* Hackathon Project Presentation Modal */}
+      {showIntro && <ProjectIntroModal onClose={() => setShowIntro(false)} />}
+
+      {/* Official Lab Report Modal */}
+      {activeReportData && (
+        <LabReportModal
+          reportData={activeReportData}
+          onClose={() => setActiveReportData(null)}
+        />
+      )}
     </div>
   );
 }

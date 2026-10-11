@@ -5,7 +5,6 @@
  * Strictly adheres to rule: NEVER invent measurements or fake events.
  */
 
-let lastEventTime = 0;
 let lastSpeechTime = 0;
 let lastState = {
   isApplyingForce: false,
@@ -51,11 +50,8 @@ export function evaluatePhysicsEvents(telemetry, options = {}) {
     force = 0,
     acceleration = 0,
     velocity = 0,
-    vx = 0,
-    vy = 0,
     posX = 0,
     posY = 0,
-    mass = 1.0,
     isFrozen = false,
     handSpeed = 0,
     isWallHit = false,

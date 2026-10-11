@@ -15,6 +15,8 @@ async function apiRequest(endpoint, options = {}) {
     ...(options.headers || {})
   };
 
+  const isHealth = Boolean(options.isHealthCheck || endpoint === '/health');
+
   // Try relative proxy path first
   try {
     const res = await fetch(`${API_BASE}${endpoint}`, {
@@ -24,13 +26,17 @@ async function apiRequest(endpoint, options = {}) {
     if (res.ok) {
       return await res.json();
     }
-    // If 404 on proxy, fallback to direct port
-    if (res.status === 404 || res.status === 502) {
+    // If 404, 502, or 503 on proxy, throw to consider fallback
+    if (res.status === 404 || res.status === 502 || res.status === 503) {
       throw new Error(`Proxy status ${res.status}`);
     }
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.error || `Server responded with status ${res.status}`);
   } catch (primaryErr) {
+    if (options.signal?.aborted || primaryErr?.name === 'AbortError') {
+      throw primaryErr;
+    }
+
     // If proxy failed, attempt direct backend connection
     try {
       const fallbackRes = await fetch(`${DIRECT_BACKEND}${endpoint}`, {
@@ -43,7 +49,13 @@ async function apiRequest(endpoint, options = {}) {
       const errorData = await fallbackRes.json().catch(() => ({}));
       throw new Error(errorData.error || `Backend responded with status ${fallbackRes.status}`);
     } catch (fallbackErr) {
-      console.error('API Request failed:', primaryErr, fallbackErr);
+      if (options.signal?.aborted || fallbackErr?.name === 'AbortError') {
+        throw fallbackErr;
+      }
+      // For user-initiated actions, log detailed error to console
+      if (!isHealth) {
+        console.error('API Request failed:', primaryErr, fallbackErr);
+      }
       throw new Error(
         'AI Server unavailable. Please ensure the backend server is running on port 5000 (run `node server/index.js`).'
       );
@@ -54,10 +66,17 @@ async function apiRequest(endpoint, options = {}) {
 /**
  * Check backend health & status
  */
-export async function checkServerHealth() {
+export async function checkServerHealth(signal = null) {
   try {
-    return await apiRequest('/health', { method: 'GET' });
+    return await apiRequest('/health', {
+      method: 'GET',
+      signal,
+      isHealthCheck: true
+    });
   } catch (err) {
+    if (err?.name === 'AbortError') {
+      return null;
+    }
     return {
       status: 'offline',
       openaiConfigured: false,

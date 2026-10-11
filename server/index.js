@@ -2,8 +2,14 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import OpenAI from 'openai';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const distPath = path.join(__dirname, '../dist');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -966,6 +972,31 @@ Provide a concise, encouraging 2-3 sentence tutoring breakdown:
       error: 'Failed to explain quiz answer.'
     });
   }
+});
+
+// Health check endpoint (both /api/health and /health)
+const handleHealthCheck = (req, res) => {
+  res.json({
+    status: 'online',
+    service: 'Touchless Physics Lab AI Server',
+    platform: 'Touchless Physics Lab',
+    openaiConfigured: Boolean(openai),
+    aiConnected: Boolean(openai),
+    model: OPENAI_MODEL,
+    timestamp: new Date().toISOString()
+  });
+};
+
+app.get('/api/health', handleHealthCheck);
+app.get('/health', handleHealthCheck);
+
+// Serve compiled frontend assets for unified full-stack deployment
+app.use(express.static(distPath));
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) return next();
+  res.sendFile(path.join(distPath, 'index.html'), (err) => {
+    if (err) next();
+  });
 });
 
 // Start Express Server

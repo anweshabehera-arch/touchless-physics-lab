@@ -31,26 +31,73 @@ export default function PhysicsAssistant({ getLabSnapshot, activeExperiment }) {
   // Reference for reading aloud
   const voiceControlsRef = useRef(null);
 
-  // Check backend server health periodically or on mount
+  // Check backend server health with backoff retry strategy and proper cleanup
   useEffect(() => {
     let isMounted = true;
-    const check = async () => {
+    let abortController = new AbortController();
+    let timeoutId = null;
+    let failureCount = 0;
+
+    const scheduleNextCheck = (delayMs) => {
+      if (!isMounted) return;
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        runCheck();
+      }, delayMs);
+    };
+
+    const runCheck = async () => {
+      if (!isMounted) return;
       try {
-        const res = await checkServerHealth();
-        if (isMounted) {
-          setServerStatus(res.status === 'online' ? 'online' : 'offline');
+        abortController = new AbortController();
+        const res = await checkServerHealth(abortController.signal);
+        if (!isMounted) return;
+
+        if (res && res.status === 'online') {
+          failureCount = 0;
+          setServerStatus('online');
+          // When online, check periodically every 60 seconds
+          scheduleNextCheck(60000);
+        } else {
+          failureCount += 1;
+          setServerStatus('offline');
+          // Backoff after failure so we don't spam requests: 60s -> 120s -> 180s cap
+          const backoff = Math.min(60000 * Math.pow(1.5, failureCount - 1), 180000);
+          scheduleNextCheck(backoff);
         }
-      } catch (_) {
-        if (isMounted) setServerStatus('offline');
+      } catch (err) {
+        if (!isMounted || err?.name === 'AbortError') return;
+        failureCount += 1;
+        setServerStatus('offline');
+        const backoff = Math.min(60000 * Math.pow(1.5, failureCount - 1), 180000);
+        scheduleNextCheck(backoff);
       }
     };
-    check();
-    const interval = setInterval(check, 30000);
+
+    // Initial check on mount
+    runCheck();
+
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      if (timeoutId) clearTimeout(timeoutId);
+      abortController.abort();
     };
   }, []);
+
+  // When user opens Dr. Nova assistant and server was offline, trigger an immediate re-check
+  useEffect(() => {
+    if (isOpen && serverStatus === 'offline') {
+      const controller = new AbortController();
+      checkServerHealth(controller.signal)
+        .then((res) => {
+          if (res && res.status === 'online') {
+            setServerStatus('online');
+          }
+        })
+        .catch(() => {});
+      return () => controller.abort();
+    }
+  }, [isOpen, serverStatus]);
 
   const handleAsk = async (e, textOverride) => {
     e?.preventDefault();
@@ -116,27 +163,29 @@ export default function PhysicsAssistant({ getLabSnapshot, activeExperiment }) {
 
   return (
     <>
-      {/* Floating Main AI Launcher Button */}
-      {!isOpen && (
-        <button
-          type="button"
-          className="ai-floating-trigger"
-          onClick={() => {
-            setIsOpen(true);
-            setIsMinimized(false);
-          }}
-          title="Open AI Physics Assistant"
-          aria-label="Open AI Physics Assistant"
-        >
-          <div className="trigger-glow" />
-          <span className="trigger-icon">🤖</span>
-          <span className="trigger-text">AI ASSISTANT</span>
-          <span
-            className={`server-status-dot ${serverStatus}`}
-            title={`Server: ${serverStatus}`}
-          />
-        </button>
-      )}
+      {/* Floating Main AI Launcher / Toggle Button (Fixed Bottom-Right) */}
+      <button
+        type="button"
+        className={`ai-floating-trigger ${isOpen ? 'active' : ''}`}
+        onClick={() => {
+          setIsOpen((prev) => !prev);
+          if (isMinimized) setIsMinimized(false);
+        }}
+        title={isOpen ? "Close AI Physics Assistant" : "Open AI Physics Assistant"}
+        aria-label={isOpen ? "Close AI Physics Assistant" : "Open AI Physics Assistant"}
+        aria-expanded={isOpen}
+      >
+        <div className="trigger-glow" />
+        <span className="trigger-icon">🤖</span>
+        <span className="trigger-text">AI ASSISTANT</span>
+        <span
+          className={`server-status-dot ${serverStatus}`}
+          title={`Server: ${serverStatus}`}
+        />
+        <span className="trigger-chevron" aria-hidden="true">
+          {isOpen ? '✕' : '▲'}
+        </span>
+      </button>
 
       {/* Main AI Assistant Floating Panel */}
       {isOpen && (

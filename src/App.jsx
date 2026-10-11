@@ -1,10 +1,19 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import "./App.css";
 import "./components/HandForceLab/HandForceLab.css";
 import * as THREE from "three";
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
-import { ArrowLeft, BookOpen, Award, CheckCircle2 } from "lucide-react";
+import {
+  ArrowLeft,
+  BookOpen,
+  Award,
+  Compass,
+  FileText,
+  Info,
+  Camera,
+  CameraOff
+} from "lucide-react";
 import PhysicsAssistant from "./components/PhysicsAssistant/PhysicsAssistant";
 import LivePhysicsHUD from "./components/HandForceLab/LivePhysicsHUD";
 import PhysicsActionChain from "./components/HandForceLab/PhysicsActionChain";
@@ -13,8 +22,12 @@ import LearnPanel from "./components/HandForceLab/LearnPanel";
 import PhysicsEventTimeline from "./components/HandForceLab/PhysicsEventTimeline";
 import HowToPerformModal from "./components/HandForceLab/HowToPerformModal";
 import ExperimentQuizModal from "./components/HandForceLab/ExperimentQuizModal";
+import GuidedExperimentPanel from "./components/HandForceLab/GuidedExperimentPanel";
+import LabReportModal from "./components/HandForceLab/LabReportModal";
+import ProjectIntroModal from "./components/portal/ProjectIntroModal";
 import { EXPERIMENTS, EXPERIMENT_LIST } from "./data/experimentsData";
 import { getExperimentRecord } from "./auth/experimentStorage";
+import { getDisplayName, getSession } from "./auth/authStorage";
 import { evaluatePhysicsEvents } from "./services/physicsEventEngine";
 
 export default function App() {
@@ -29,15 +42,29 @@ export default function App() {
   );
   const activeExperiment = EXPERIMENTS[activeExpId] || EXPERIMENTS.newton;
   const activeExpIdRef = useRef(activeExpId);
-  activeExpIdRef.current = activeExpId;
+  useEffect(() => {
+    activeExpIdRef.current = activeExpId;
+  }, [activeExpId]);
+
+  // Student Session
+  const session = getSession();
+  const studentName = getDisplayName(session);
 
   // Modals state
   const [isHowToOpen, setIsHowToOpen] = useState(false);
   const [isQuizOpen, setIsQuizOpen] = useState(false);
+  const [isGuidedModeOpen, setIsGuidedModeOpen] = useState(false);
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [isIntroOpen, setIsIntroOpen] = useState(false);
   const [quizScoreBadge, setQuizScoreBadge] = useState(() => {
     const rec = getExperimentRecord(activeExpId);
     return rec ? rec.score : null;
   });
+  const [lastQuizResult, setLastQuizResult] = useState(null);
+
+  // Camera & Tracking State
+  const [cameraEnabled, setCameraEnabled] = useState(true);
+  const [cameraStatus, setCameraStatus] = useState("active"); // 'active' | 'lost' | 'disabled' | 'denied'
 
   // User Physics Settings across all labs
   const [mass, setMass] = useState(1.0); // kg (Ball 1)
@@ -45,6 +72,8 @@ export default function App() {
   const [springK, setSpringK] = useState(25.0); // N/m (Hooke)
   const [launchAngle, setLaunchAngle] = useState(45); // degrees (Projectile)
   const [launchSpeed, setLaunchSpeed] = useState(5.0); // m/s (Projectile)
+  const [appliedForceManual, setAppliedForceManual] = useState(0); // N (Manual Force for Newton)
+  const [collisionType, setCollisionType] = useState("elastic"); // 'elastic' | 'inelastic'
   const [isPaused, setIsPaused] = useState(false);
   const [showVectors, setShowVectors] = useState(true);
   const [showInvisible, setShowInvisible] = useState(true);
@@ -78,6 +107,7 @@ export default function App() {
     p2: 0,
     pTotal: 0,
     keTotal: 0,
+    keInitial: 0,
     // Projectile-specific
     projAngle: 45,
     projV0: 5.0,
@@ -122,11 +152,16 @@ export default function App() {
   const simControlsRef = useRef({
     resetSim: null,
     fireProjectile: null,
+    triggerImpact: null,
+    launchBall1: null,
     setMassRef: null,
     setMass2Ref: null,
     setSpringKRef: null,
     setLaunchAngleRef: null,
     setLaunchSpeedRef: null,
+    setAppliedForceManualRef: null,
+    setCollisionTypeRef: null,
+    setCameraEnabledRef: null,
     setIsPausedRef: null,
     setShowVectorsRef: null,
     setShowInvisibleRef: null,
@@ -186,6 +221,18 @@ export default function App() {
   }, [launchSpeed]);
 
   useEffect(() => {
+    simControlsRef.current.setAppliedForceManualRef?.(appliedForceManual);
+  }, [appliedForceManual]);
+
+  useEffect(() => {
+    simControlsRef.current.setCollisionTypeRef?.(collisionType);
+  }, [collisionType]);
+
+  useEffect(() => {
+    simControlsRef.current.setCameraEnabledRef?.(cameraEnabled);
+  }, [cameraEnabled]);
+
+  useEffect(() => {
     simControlsRef.current.setShowVectorsRef?.(showVectors);
   }, [showVectors]);
 
@@ -197,14 +244,48 @@ export default function App() {
     simControlsRef.current.setVoiceRef?.(explainVoice);
   }, [explainVoice]);
 
+  // Keyboard Shortcuts (Space: Pause/Fire, R: Reset, G: Guided, V: Vectors)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (
+        e.target.tagName === "INPUT" ||
+        e.target.tagName === "TEXTAREA" ||
+        e.target.tagName === "SELECT"
+      ) {
+        return;
+      }
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (activeExpId === "projectile" && !physicsState.isAirborne) {
+          simControlsRef.current.fireProjectile?.();
+        } else {
+          setIsPaused((p) => {
+            const next = !p;
+            simControlsRef.current.setIsPausedRef?.(next);
+            return next;
+          });
+        }
+      } else if (e.key === "r" || e.key === "R") {
+        simControlsRef.current.resetSim?.(activeExpId);
+      } else if (e.key === "g" || e.key === "G") {
+        setIsGuidedModeOpen((g) => !g);
+      } else if (e.key === "v" || e.key === "V") {
+        setShowVectors((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeExpId, physicsState.isAirborne]);
+
   // Update quiz badge when quiz finishes
   const handleQuizCompleted = (result) => {
     setQuizScoreBadge(result.score);
+    setLastQuizResult(result);
   };
 
   // Main Three.js + MediaPipe Simulation Lifecycle
   useEffect(() => {
-    let stream;
+    let stream = null;
     let animationId;
     let handLandmarker;
     let destroyed = false;
@@ -252,7 +333,8 @@ export default function App() {
         b1: { x: -0.45, y: 0, vx: 0, vy: 0, mass: 1.0, radius: 0.075 },
         b2: { x: 0.35, y: 0, vx: 0, vy: 0, mass: 1.0, radius: 0.075 },
         pTotal: 0,
-        keTotal: 0
+        keTotal: 0,
+        keInitial: 0
       },
       // 5. Projectile Motion Cannon & Ball
       projectile: {
@@ -276,6 +358,9 @@ export default function App() {
     let currentShowVectors = showVectors;
     let currentShowInvisible = showInvisible;
     let currentVoiceEnabled = explainVoice;
+    let currentAppliedForce = appliedForceManual;
+    let currentCollisionType = collisionType;
+    let isWebcamEnabled = cameraEnabled;
     let totalSimTime = 0;
 
     // Expose control handlers
@@ -297,6 +382,12 @@ export default function App() {
     simControlsRef.current.setLaunchSpeedRef = (spd) => {
       simState.projectile.v0 = spd;
     };
+    simControlsRef.current.setAppliedForceManualRef = (af) => {
+      currentAppliedForce = af;
+    };
+    simControlsRef.current.setCollisionTypeRef = (ct) => {
+      currentCollisionType = ct;
+    };
     simControlsRef.current.setIsPausedRef = (p) => {
       simPaused = p;
     };
@@ -311,14 +402,14 @@ export default function App() {
     };
 
     const resetSimulation = (expId = activeExpIdRef.current) => {
-      if (expId === 'newton') {
+      if (expId === "newton") {
         simState.newton.x = 0;
         simState.newton.y = 0;
         simState.newton.vx = 0;
         simState.newton.vy = 0;
         simState.newton.ax = 0;
         simState.newton.ay = 0;
-      } else if (expId === 'impulse') {
+      } else if (expId === "impulse") {
         simState.impulse.x = 0;
         simState.impulse.y = 0;
         simState.impulse.vx = 0;
@@ -328,11 +419,11 @@ export default function App() {
         simState.impulse.impulseJ = 0;
         simState.impulse.deltaP = 0;
         simState.impulse.isContact = false;
-      } else if (expId === 'hooke') {
+      } else if (expId === "hooke") {
         simState.hooke.x = 0.25;
         simState.hooke.vx = 0;
         simState.hooke.ax = 0;
-      } else if (expId === 'collision') {
+      } else if (expId === "collision") {
         simState.collision.b1.x = -0.45;
         simState.collision.b1.y = 0;
         simState.collision.b1.vx = 0;
@@ -341,7 +432,7 @@ export default function App() {
         simState.collision.b2.y = 0;
         simState.collision.b2.vx = 0;
         simState.collision.b2.vy = 0;
-      } else if (expId === 'projectile') {
+      } else if (expId === "projectile") {
         simState.projectile.isAirborne = false;
         simState.projectile.x = simState.projectile.startX;
         simState.projectile.y = simState.projectile.startY;
@@ -361,9 +452,25 @@ export default function App() {
       p.vx = p.v0 * Math.cos(rad);
       p.vy = p.v0 * Math.sin(rad);
       p.flightTime = 0;
-      p.maxHeight = p.startY + Math.pow(p.v0 * Math.sin(rad), 2) / (2 * p.gravity);
+      p.maxHeight =
+        p.startY + Math.pow(p.v0 * Math.sin(rad), 2) / (2 * p.gravity);
       p.range = (Math.pow(p.v0, 2) * Math.sin(2 * rad)) / p.gravity;
       p.isAirborne = true;
+    };
+
+    simControlsRef.current.triggerImpact = () => {
+      const b = simState.impulse;
+      b.vx = 4.8 / b.mass;
+      b.peakForce = 24.5;
+      b.contactTime = 0.08;
+      b.impulseJ = 4.8;
+      b.deltaP = 4.8;
+    };
+
+    simControlsRef.current.launchBall1 = () => {
+      const { b1 } = simState.collision;
+      b1.vx = 3.6;
+      b1.vy = 0;
     };
 
     const start = async () => {
@@ -372,30 +479,54 @@ export default function App() {
       if (!video || !canvas) return;
 
       // =====================================================
-      // 1. CAMERA STREAM
+      // 1. CAMERA STREAM INITIALIZATION
       // =====================================================
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: 1280,
-            height: 720,
-            facingMode: "user"
-          },
-          audio: false
-        });
+      const initCamera = async () => {
+        if (!isWebcamEnabled) {
+          setCameraStatus("disabled");
+          return;
+        }
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              width: 1280,
+              height: 720,
+              facingMode: "user"
+            },
+            audio: false
+          });
 
-        if (destroyed) return;
-        video.srcObject = stream;
+          if (destroyed) return;
+          video.srcObject = stream;
 
-        await new Promise((resolve) => {
-          if (video.readyState >= 1) resolve();
-          else video.onloadedmetadata = resolve;
-        });
+          await new Promise((resolve) => {
+            if (video.readyState >= 1) resolve();
+            else video.onloadedmetadata = resolve;
+          });
 
-        await video.play();
-      } catch (err) {
-        console.error("Camera access error:", err);
-      }
+          await video.play();
+          setCameraStatus("active");
+        } catch (err) {
+          console.warn("Webcam access unavailable or denied:", err);
+          setCameraStatus("denied");
+        }
+      };
+
+      await initCamera();
+
+      simControlsRef.current.setCameraEnabledRef = async (enabled) => {
+        isWebcamEnabled = enabled;
+        if (!enabled) {
+          if (stream) {
+            stream.getTracks().forEach((t) => t.stop());
+            stream = null;
+          }
+          if (videoRef.current) videoRef.current.srcObject = null;
+          setCameraStatus("disabled");
+        } else {
+          await initCamera();
+        }
+      };
 
       if (destroyed) return;
 
@@ -427,8 +558,6 @@ export default function App() {
       // =====================================================
       // 3. OBJECT GROUPS FOR EACH EXPERIMENT
       // =====================================================
-
-      // Helper to build a glowing sphere
       const createGlowSphere = (radius, hexColor) => {
         const group = new THREE.Group();
         const core = new THREE.Mesh(
@@ -472,7 +601,6 @@ export default function App() {
       // --- Group 3: Hooke's Law Spring & Bob ---
       const hookeGroup = new THREE.Group();
 
-      // Anchor Post at center (x = 0)
       const anchorMesh = new THREE.Mesh(
         new THREE.CylinderGeometry(0.02, 0.02, 0.2, 16),
         new THREE.MeshBasicMaterial({ color: 0x38d9ff })
@@ -480,21 +608,21 @@ export default function App() {
       anchorMesh.rotation.z = Math.PI / 2;
       hookeGroup.add(anchorMesh);
 
-      // Spring coil line (18 points zig-zag)
       const SPRING_POINTS = 18;
       const springLinePositions = new Float32Array(SPRING_POINTS * 3);
       const springGeometry = new THREE.BufferGeometry();
-      springGeometry.setAttribute("position", new THREE.BufferAttribute(springLinePositions, 3));
+      springGeometry.setAttribute(
+        "position",
+        new THREE.BufferAttribute(springLinePositions, 3)
+      );
       const springLine = new THREE.Line(
         springGeometry,
         new THREE.LineBasicMaterial({ color: 0x38d9ff, linewidth: 2 })
       );
       hookeGroup.add(springLine);
 
-      // Mass bob on spring
       const hookeBob = createGlowSphere(0.08, 0x31f2a1);
       hookeGroup.add(hookeBob.group);
-
       scene.add(hookeGroup);
 
       // --- Group 4: Collision Two Balls ---
@@ -508,18 +636,20 @@ export default function App() {
       // --- Group 5: Projectile Cannon, Ground, Target & Projectile ---
       const projectileGroup = new THREE.Group();
 
-      // Ground Line
       const groundLineGeom = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(-aspect, -0.62, 0),
         new THREE.Vector3(aspect, -0.62, 0)
       ]);
       const groundLine = new THREE.Line(
         groundLineGeom,
-        new THREE.LineBasicMaterial({ color: 0x167cff, transparent: true, opacity: 0.6 })
+        new THREE.LineBasicMaterial({
+          color: 0x167cff,
+          transparent: true,
+          opacity: 0.6
+        })
       );
       projectileGroup.add(groundLine);
 
-      // Cannon Barrel (Rotating Cylinder)
       const cannonBarrel = new THREE.Mesh(
         new THREE.CylinderGeometry(0.025, 0.03, 0.18, 16),
         new THREE.MeshBasicMaterial({ color: 0x38d9ff })
@@ -527,7 +657,6 @@ export default function App() {
       cannonBarrel.position.set(-0.9, -0.6, 0);
       projectileGroup.add(cannonBarrel);
 
-      // Target Pad at right
       const targetPad = new THREE.Mesh(
         new THREE.RingGeometry(0.02, 0.08, 32),
         new THREE.MeshBasicMaterial({ color: 0x31f2a1, side: THREE.DoubleSide })
@@ -535,11 +664,13 @@ export default function App() {
       targetPad.position.set(0.65, -0.61, 0);
       projectileGroup.add(targetPad);
 
-      // Projectile Parabolic Trajectory Preview Line
       const TRAJ_POINTS = 40;
       const trajPositions = new Float32Array(TRAJ_POINTS * 3);
       const trajGeometry = new THREE.BufferGeometry();
-      trajGeometry.setAttribute("position", new THREE.BufferAttribute(trajPositions, 3));
+      trajGeometry.setAttribute(
+        "position",
+        new THREE.BufferAttribute(trajPositions, 3)
+      );
       const trajLine = new THREE.Line(
         trajGeometry,
         new THREE.LineBasicMaterial({
@@ -551,10 +682,8 @@ export default function App() {
       );
       projectileGroup.add(trajLine);
 
-      // Projectile Flying Ball
       const projectileBall = createGlowSphere(0.05, 0xffbb33);
       projectileGroup.add(projectileBall.group);
-
       scene.add(projectileGroup);
 
       // =====================================================
@@ -627,7 +756,10 @@ export default function App() {
         ambientPositions[i * 3 + 2] = (Math.random() - 0.5) * 0.1;
       }
       const ambientGeometry = new THREE.BufferGeometry();
-      ambientGeometry.setAttribute("position", new THREE.BufferAttribute(ambientPositions, 3));
+      ambientGeometry.setAttribute(
+        "position",
+        new THREE.BufferAttribute(ambientPositions, 3)
+      );
       const ambientParticles = new THREE.Points(
         ambientGeometry,
         new THREE.PointsMaterial({
@@ -641,15 +773,16 @@ export default function App() {
       scene.add(ambientParticles);
 
       // =====================================================
-      // 5. MEDIAPIPE HAND TRACKER
+      // 5. MEDIAPIPE HAND TRACKER & SMOOTHING
       // =====================================================
       let detectedHands = [];
       let previousHands = [];
       let fistActive = false;
       let lastHandCheck = 0;
+      let lastSwipeImpulseTime = 0;
 
       const detectHands = () => {
-        if (!handLandmarker || video.readyState < 2) return;
+        if (!isWebcamEnabled || !handLandmarker || video.readyState < 2) return;
         try {
           const result = handLandmarker.detectForVideo(video, performance.now());
           if (!result.landmarks || result.landmarks.length === 0) {
@@ -677,12 +810,12 @@ export default function App() {
               Math.pow(thumb.x - index.x, 2) + Math.pow(thumb.y - index.y, 2)
             );
 
-            const x = (0.5 - (wrist.x + palm.x) / 2) * aspect * 2;
-            const y = (0.5 - (wrist.y + palm.y) / 2) * 2;
+            const rawX = (0.5 - (wrist.x + palm.x) / 2) * aspect * 2;
+            const rawY = (0.5 - (wrist.y + palm.y) / 2) * 2;
 
             currentList.push({
-              x,
-              y,
+              x: rawX,
+              y: rawY,
               isFist,
               pinchDistance: pinchDist
             });
@@ -696,7 +829,62 @@ export default function App() {
       };
 
       // =====================================================
-      // 6. MAIN SIMULATION & ANIMATION LOOP
+      // 6. INTERACTIVE MOUSE / TOUCH CONTROLS (FALLBACK & HYBRID)
+      // =====================================================
+      let pointerActive = false;
+      let pointerX = 0;
+      let pointerY = 0;
+      let prevPointerX = 0;
+      let prevPointerY = 0;
+      let pointerSpeed = 0;
+
+      const onPointerDown = (e) => {
+        pointerActive = true;
+        const rect = canvas.getBoundingClientRect();
+        pointerX = ((e.clientX - rect.left) / rect.width - 0.5) * aspect * 2;
+        pointerY = -((e.clientY - rect.top) / rect.height - 0.5) * 2;
+        prevPointerX = pointerX;
+        prevPointerY = pointerY;
+
+        // Click on impulse target triggers strike
+        if (activeExpIdRef.current === "impulse") {
+          const d = Math.sqrt(
+            Math.pow(pointerX - simState.impulse.x, 2) +
+              Math.pow(pointerY - simState.impulse.y, 2)
+          );
+          if (d < 0.35) {
+            simControlsRef.current.triggerImpact?.();
+          }
+        }
+      };
+
+      const onPointerMove = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const px = ((e.clientX - rect.left) / rect.width - 0.5) * aspect * 2;
+        const py = -((e.clientY - rect.top) / rect.height - 0.5) * 2;
+        pointerSpeed = Math.sqrt(
+          Math.pow(px - prevPointerX, 2) + Math.pow(py - prevPointerY, 2)
+        );
+        prevPointerX = pointerX;
+        prevPointerY = pointerY;
+        pointerX = px;
+        pointerY = py;
+      };
+
+      const onPointerUp = () => {
+        pointerActive = false;
+        pointerSpeed = 0;
+        if (simState.hooke.isHandGrab) {
+          simState.hooke.isHandGrab = false;
+        }
+      };
+
+      canvas.addEventListener("pointerdown", onPointerDown);
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+
+      // =====================================================
+      // 7. MAIN SIMULATION & ANIMATION LOOP
       // =====================================================
       let lastTime = performance.now();
       let lastThrottleUpdate = 0;
@@ -711,7 +899,7 @@ export default function App() {
         totalSimTime += dt;
 
         // Check hand tracking at 25-30 FPS
-        if (handLandmarker && now - lastHandCheck > 35) {
+        if (isWebcamEnabled && handLandmarker && now - lastHandCheck > 35) {
           lastHandCheck = now;
           detectHands();
         }
@@ -725,7 +913,7 @@ export default function App() {
         collisionGroup.visible = currentExp === "collision";
         projectileGroup.visible = currentExp === "projectile";
 
-        // Hand gesture parsing
+        // Hand gesture parsing or mouse fallback
         let primaryHand = detectedHands[0] || null;
         let maxHandSpeed = 0;
         let currentGesture = "NONE";
@@ -743,9 +931,10 @@ export default function App() {
             currentGesture = "FIST";
           } else if (primaryHand.pinchDistance < 0.08) {
             currentGesture = "PINCH";
-          } else if (maxHandSpeed > 0.018) {
+          } else if (maxHandSpeed > 0.018 && now - lastSwipeImpulseTime > 350) {
             currentGesture = "FAST_MOTION";
             isFastImpulse = true;
+            lastSwipeImpulseTime = now;
             shockwaveMesh.position.set(primaryHand.x, primaryHand.y, 0);
             shockwaveMesh.visible = true;
             shockwaveScale = 0.04;
@@ -762,6 +951,25 @@ export default function App() {
           }
 
           previousHands = detectedHands.map((h) => ({ x: h.x, y: h.y }));
+        } else if (pointerActive) {
+          // Virtual hand from mouse pointer
+          primaryHand = {
+            x: pointerX,
+            y: pointerY,
+            isFist: false,
+            pinchDistance: 0.15
+          };
+          maxHandSpeed = pointerSpeed;
+          currentGesture = pointerSpeed > 0.025 ? "FAST_MOTION" : "MOVE_HAND";
+          isFastImpulse = pointerSpeed > 0.025 && now - lastSwipeImpulseTime > 350;
+          if (isFastImpulse) lastSwipeImpulseTime = now;
+
+          if (currentShowInvisible) {
+            handRadiusRing.position.set(pointerX, pointerY, 0);
+            handRadiusRing.visible = true;
+          } else {
+            handRadiusRing.visible = false;
+          }
         } else {
           handRadiusRing.visible = false;
         }
@@ -773,13 +981,13 @@ export default function App() {
           shockwaveScale += 0.03;
           shockwaveMesh.scale.set(shockwaveScale, shockwaveScale, 1);
           shockwaveMesh.material.opacity = shockwaveOpacity;
-          shockwaveOpacity *= 0.90;
+          shockwaveOpacity *= 0.9;
         } else {
           shockwaveMesh.visible = false;
         }
 
         // =====================================================
-        // 7. MULTI-EXPERIMENT PHYSICS INTEGRATION
+        // 8. MULTI-EXPERIMENT PHYSICS INTEGRATION
         // =====================================================
         let currentForceMag = 0;
         let currentAccelMag = 0;
@@ -787,13 +995,19 @@ export default function App() {
         let isWallHit = false;
 
         // -----------------------------------------------------
-        // EXPERIMENT 1: NEWTON'S 2ND LAW (F = m · a)
+        // EXPERIMENT 1: NEWTON'S 2ND LAW (F_net = m · a)
         // -----------------------------------------------------
         if (currentExp === "newton") {
           const ball = simState.newton;
           let appliedFx = 0;
           let appliedFy = 0;
 
+          // Manual force slider contribution
+          if (currentAppliedForce > 0 && !effectiveFrozen) {
+            appliedFx += currentAppliedForce;
+          }
+
+          // Proximity repulsive force
           if (primaryHand && !effectiveFrozen) {
             const dx = ball.x - primaryHand.x;
             const dy = ball.y - primaryHand.y;
@@ -808,8 +1022,8 @@ export default function App() {
               const impulseBoost = isFastImpulse ? maxHandSpeed * 75.0 : 0;
               const totalF = basePush + speedPush + impulseBoost;
 
-              appliedFx = dirX * totalF;
-              appliedFy = dirY * totalF;
+              appliedFx += dirX * totalF;
+              appliedFy += dirY * totalF;
             }
           }
 
@@ -830,10 +1044,24 @@ export default function App() {
             const limitX = aspect - ball.radius;
             const limitY = 1.0 - ball.radius;
 
-            if (ball.x > limitX) { ball.x = limitX; ball.vx *= -0.82; isWallHit = true; }
-            else if (ball.x < -limitX) { ball.x = -limitX; ball.vx *= -0.82; isWallHit = true; }
-            if (ball.y > limitY) { ball.y = limitY; ball.vy *= -0.82; isWallHit = true; }
-            else if (ball.y < -limitY) { ball.y = -limitY; ball.vy *= -0.82; isWallHit = true; }
+            if (ball.x > limitX) {
+              ball.x = limitX;
+              ball.vx *= -0.82;
+              isWallHit = true;
+            } else if (ball.x < -limitX) {
+              ball.x = -limitX;
+              ball.vx *= -0.82;
+              isWallHit = true;
+            }
+            if (ball.y > limitY) {
+              ball.y = limitY;
+              ball.vy *= -0.82;
+              isWallHit = true;
+            } else if (ball.y < -limitY) {
+              ball.y = -limitY;
+              ball.vy *= -0.82;
+              isWallHit = true;
+            }
           }
 
           currentForceMag = Math.sqrt(appliedFx * appliedFx + appliedFy * appliedFy);
@@ -846,22 +1074,40 @@ export default function App() {
             const pos = new THREE.Vector3(ball.x, ball.y, 0);
             if (currentForceMag > 0.15) {
               forceArrow.position.copy(pos);
-              forceArrow.setDirection(new THREE.Vector3(appliedFx, appliedFy, 0).normalize());
-              forceArrow.setLength(Math.min(0.6, currentForceMag * 0.14), 0.06, 0.04);
+              forceArrow.setDirection(
+                new THREE.Vector3(appliedFx, appliedFy, 0).normalize()
+              );
+              forceArrow.setLength(
+                Math.min(0.6, currentForceMag * 0.14),
+                0.06,
+                0.04
+              );
               forceArrow.visible = true;
             } else forceArrow.visible = false;
 
             if (currentSpeedMag > 0.08) {
               velocityArrow.position.copy(pos);
-              velocityArrow.setDirection(new THREE.Vector3(ball.vx, ball.vy, 0).normalize());
-              velocityArrow.setLength(Math.min(0.55, currentSpeedMag * 0.22), 0.06, 0.04);
+              velocityArrow.setDirection(
+                new THREE.Vector3(ball.vx, ball.vy, 0).normalize()
+              );
+              velocityArrow.setLength(
+                Math.min(0.55, currentSpeedMag * 0.22),
+                0.06,
+                0.04
+              );
               velocityArrow.visible = true;
             } else velocityArrow.visible = false;
 
             if (currentAccelMag > 0.2) {
               accelArrow.position.copy(pos);
-              accelArrow.setDirection(new THREE.Vector3(ball.ax, ball.ay, 0).normalize());
-              accelArrow.setLength(Math.min(0.5, currentAccelMag * 0.12), 0.05, 0.035);
+              accelArrow.setDirection(
+                new THREE.Vector3(ball.ax, ball.ay, 0).normalize()
+              );
+              accelArrow.setLength(
+                Math.min(0.5, currentAccelMag * 0.12),
+                0.05,
+                0.035
+              );
               accelArrow.visible = true;
             } else accelArrow.visible = false;
           } else {
@@ -890,7 +1136,7 @@ export default function App() {
 
               const dirX = dx / dist;
               const dirY = dy / dist;
-              const proximity = (1 - dist / 0.38);
+              const proximity = 1 - dist / 0.38;
               const instForce = proximity * 18.0 + maxHandSpeed * 100.0;
 
               contactFx = dirX * instForce;
@@ -899,7 +1145,6 @@ export default function App() {
               ball.peakForce = Math.max(ball.peakForce, instForce);
               ball.impulseJ += instForce * dt;
 
-              // Accelerate ball
               ball.vx += (contactFx / ball.mass) * dt;
               ball.vy += (contactFy / ball.mass) * dt;
 
@@ -912,22 +1157,32 @@ export default function App() {
           }
 
           if (!effectiveFrozen) {
-            // Drag
             ball.vx *= 0.96;
             ball.vy *= 0.96;
             ball.x += ball.vx * dt;
             ball.y += ball.vy * dt;
 
-            // Boundaries
             const limitX = aspect - ball.radius;
             const limitY = 1.0 - ball.radius;
-            if (ball.x > limitX) { ball.x = limitX; ball.vx *= -0.7; }
-            else if (ball.x < -limitX) { ball.x = -limitX; ball.vx *= -0.7; }
-            if (ball.y > limitY) { ball.y = limitY; ball.vy *= -0.7; }
-            else if (ball.y < -limitY) { ball.y = -limitY; ball.vy *= -0.7; }
+            if (ball.x > limitX) {
+              ball.x = limitX;
+              ball.vx *= -0.7;
+            } else if (ball.x < -limitX) {
+              ball.x = -limitX;
+              ball.vx *= -0.7;
+            }
+            if (ball.y > limitY) {
+              ball.y = limitY;
+              ball.vy *= -0.7;
+            } else if (ball.y < -limitY) {
+              ball.y = -limitY;
+              ball.vy *= -0.7;
+            }
           }
 
-          currentForceMag = Math.sqrt(contactFx * contactFx + contactFy * contactFy);
+          currentForceMag = Math.sqrt(
+            contactFx * contactFx + contactFy * contactFy
+          );
           currentSpeedMag = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
           ball.deltaP = ball.mass * currentSpeedMag;
 
@@ -942,10 +1197,8 @@ export default function App() {
         // -----------------------------------------------------
         else if (currentExp === "hooke") {
           const spring = simState.hooke;
-          let restForce = -spring.k * spring.x;
 
           if (primaryHand && !effectiveFrozen) {
-            // Grab/drag spring bob if hand is close
             const dX = Math.abs(primaryHand.x - spring.x);
             const dY = Math.abs(primaryHand.y);
             if (dX < 0.28 && dY < 0.3) {
@@ -960,25 +1213,25 @@ export default function App() {
           }
 
           if (!spring.isHandGrab && !effectiveFrozen) {
-            // F_net = -k * x - drag * v
             const damping = 0.55;
-            spring.ax = (-spring.k * spring.x - damping * spring.vx) / spring.mass;
+            spring.ax =
+              (-spring.k * spring.x - damping * spring.vx) / spring.mass;
             spring.vx += spring.ax * dt;
             spring.x += spring.vx * dt;
           }
 
-          restForce = -spring.k * spring.x;
+          const restForce = -spring.k * spring.x;
           currentForceMag = Math.abs(restForce);
           currentSpeedMag = Math.abs(spring.vx);
           currentAccelMag = Math.abs(spring.ax);
 
-          // Update spring line points (zig-zag coil between 0 and spring.x)
           const pArray = springLine.geometry.attributes.position.array;
           const totalPts = SPRING_POINTS;
           for (let i = 0; i < totalPts; i++) {
             const frac = i / (totalPts - 1);
             pArray[i * 3] = spring.x * frac;
-            pArray[i * 3 + 1] = i === 0 || i === totalPts - 1 ? 0 : (i % 2 === 0 ? 0.04 : -0.04);
+            pArray[i * 3 + 1] =
+              i === 0 || i === totalPts - 1 ? 0 : i % 2 === 0 ? 0.04 : -0.04;
             pArray[i * 3 + 2] = 0;
           }
           springLine.geometry.attributes.position.needsUpdate = true;
@@ -987,8 +1240,14 @@ export default function App() {
 
           if (currentShowVectors && Math.abs(restForce) > 0.1) {
             forceArrow.position.set(spring.x, 0, 0);
-            forceArrow.setDirection(new THREE.Vector3(restForce > 0 ? 1 : -1, 0, 0));
-            forceArrow.setLength(Math.min(0.5, Math.abs(restForce) * 0.035), 0.05, 0.035);
+            forceArrow.setDirection(
+              new THREE.Vector3(restForce > 0 ? 1 : -1, 0, 0)
+            );
+            forceArrow.setLength(
+              Math.min(0.5, Math.abs(restForce) * 0.035),
+              0.05,
+              0.035
+            );
             forceArrow.visible = true;
           } else {
             forceArrow.visible = false;
@@ -998,12 +1257,12 @@ export default function App() {
         }
 
         // -----------------------------------------------------
-        // EXPERIMENT 4: COLLISIONS & MOMENTUM CONSERVATION
+        // EXPERIMENT 4: COLLISIONS & MOMENTUM CONSERVATION (ELASTIC / INELASTIC)
         // -----------------------------------------------------
         else if (currentExp === "collision") {
           const { b1, b2 } = simState.collision;
 
-          // Hand pushes Ball 1
+          // Hand/Mouse pushes Ball 1
           if (primaryHand && !effectiveFrozen) {
             const dx = b1.x - primaryHand.x;
             const dy = b1.y - primaryHand.y;
@@ -1016,18 +1275,17 @@ export default function App() {
           }
 
           if (!effectiveFrozen) {
-            // Apply slight viscous drag
-            b1.vx *= 0.99;
-            b1.vy *= 0.99;
-            b2.vx *= 0.99;
-            b2.vy *= 0.99;
+            b1.vx *= 0.992;
+            b1.vy *= 0.992;
+            b2.vx *= 0.992;
+            b2.vy *= 0.992;
 
             b1.x += b1.vx * dt;
             b1.y += b1.vy * dt;
             b2.x += b2.vx * dt;
             b2.y += b2.vy * dt;
 
-            // Elastic Collision Check between b1 and b2
+            // Collision Check between b1 and b2
             const cdx = b2.x - b1.x;
             const cdy = b2.y - b1.y;
             const cDist = Math.sqrt(cdx * cdx + cdy * cdy);
@@ -1037,39 +1295,61 @@ export default function App() {
               const nx = cdx / cDist;
               const ny = cdy / cDist;
 
-              // Relative velocity along normal
               const kx = b1.vx - b2.vx;
               const ky = b1.vy - b2.vy;
-              const p = 2 * (nx * kx + ny * ky) / (b1.mass + b2.mass);
 
-              if (nx * kx + ny * ky > 0) { // moving toward each other
-                b1.vx -= p * b2.mass * nx;
-                b1.vy -= p * b2.mass * ny;
-                b2.vx += p * b1.mass * nx;
-                b2.vy += p * b1.mass * ny;
+              if (nx * kx + ny * ky > 0) {
+                // Moving toward each other
+                if (currentCollisionType === "inelastic") {
+                  // Perfectly Inelastic Collision: Stick together
+                  const totalM = b1.mass + b2.mass;
+                  const vCommonX = (b1.mass * b1.vx + b2.mass * b2.vx) / totalM;
+                  const vCommonY = (b1.mass * b1.vy + b2.mass * b2.vy) / totalM;
+                  b1.vx = vCommonX;
+                  b1.vy = vCommonY;
+                  b2.vx = vCommonX;
+                  b2.vy = vCommonY;
+                } else {
+                  // Elastic Collision: Momentum & Kinetic Energy Conserved
+                  const p = (2 * (nx * kx + ny * ky)) / (b1.mass + b2.mass);
+                  b1.vx -= p * b2.mass * nx;
+                  b1.vy -= p * b2.mass * ny;
+                  b2.vx += p * b1.mass * nx;
+                  b2.vy += p * b1.mass * ny;
+                }
 
-                // Push apart to prevent overlap
+                // Push apart slightly to prevent clipping
                 const overlap = (minDist - cDist) * 0.55;
                 b1.x -= nx * overlap;
                 b1.y -= ny * overlap;
                 b2.x += nx * overlap;
                 b2.y += ny * overlap;
 
-                // Collision flash
+                // Collision burst
                 shockwaveMesh.position.set((b1.x + b2.x) / 2, (b1.y + b2.y) / 2, 0);
                 shockwaveMesh.visible = true;
                 shockwaveOpacity = 0.9;
               }
             }
 
-            // Wall bounds
+            // Boundary rebounds
             const limitX = aspect - 0.08;
             const limitY = 0.92;
             [b1, b2].forEach((b) => {
-              if (b.x > limitX) { b.x = limitX; b.vx *= -0.85; }
-              else if (b.x < -limitX) { b.x = -limitX; b.vx *= -0.85; }
-              if (b.y > limitY) { b.y = limitY; b.vy *= -0.85; }
-              else if (b.y < -limitY) { b.y = -limitY; b.vy *= -0.85; }
+              if (b.x > limitX) {
+                b.x = limitX;
+                b.vx *= -0.85;
+              } else if (b.x < -limitX) {
+                b.x = -limitX;
+                b.vx *= -0.85;
+              }
+              if (b.y > limitY) {
+                b.y = limitY;
+                b.vy *= -0.85;
+              } else if (b.y < -limitY) {
+                b.y = -limitY;
+                b.vy *= -0.85;
+              }
             });
           }
 
@@ -1088,9 +1368,8 @@ export default function App() {
         else if (currentExp === "projectile") {
           const proj = simState.projectile;
 
-          // Hand aims angle and charges launch velocity
+          // Hand/Mouse aims angle
           if (primaryHand && !proj.isAirborne && !effectiveFrozen) {
-            // Hand y adjusts angle (15° to 75°)
             const normY = Math.max(0, Math.min(1, (primaryHand.y + 0.4) / 0.8));
             proj.angle = Math.round(15 + normY * 60);
 
@@ -1100,7 +1379,7 @@ export default function App() {
             }
           }
 
-          // In flight physics
+          // Flight kinematics
           if (proj.isAirborne && !effectiveFrozen) {
             proj.flightTime += dt;
             proj.x += proj.vx * dt;
@@ -1120,17 +1399,20 @@ export default function App() {
             }
           }
 
-          // Orient cannon barrel according to angle
           const rad = (proj.angle * Math.PI) / 180;
           cannonBarrel.rotation.z = rad - Math.PI / 2;
 
-          // Update parabolic preview trajectory line
           const pArray = trajLine.geometry.attributes.position.array;
           const previewV0 = proj.v0;
           for (let i = 0; i < TRAJ_POINTS; i++) {
-            const t = (i / (TRAJ_POINTS - 1)) * ((2 * previewV0 * Math.sin(rad)) / proj.gravity);
+            const t =
+              (i / (TRAJ_POINTS - 1)) *
+              ((2 * previewV0 * Math.sin(rad)) / proj.gravity);
             const px = proj.startX + previewV0 * Math.cos(rad) * t;
-            const py = proj.startY + previewV0 * Math.sin(rad) * t - 0.5 * proj.gravity * t * t;
+            const py =
+              proj.startY +
+              previewV0 * Math.sin(rad) * t -
+              0.5 * proj.gravity * t * t;
             pArray[i * 3] = px;
             pArray[i * 3 + 1] = Math.max(proj.startY, py);
             pArray[i * 3 + 2] = 0;
@@ -1145,14 +1427,14 @@ export default function App() {
           velocityArrow.visible = false;
         }
 
-        // Slowly drift ambient background particles
+        // Ambient particles drift
         ambientParticles.rotation.z = now * 0.0001;
 
         // Render Frame
         renderer.render(scene, camera);
 
         // =====================================================
-        // 8. THROTTLED TELEMETRY UPDATES (every 50ms)
+        // 9. THROTTLED TELEMETRY UPDATES (every 50ms)
         // =====================================================
         if (now - lastThrottleUpdate > 50) {
           lastThrottleUpdate = now;
@@ -1190,6 +1472,7 @@ export default function App() {
               posY: ball.y,
               momentum: p,
               kineticEnergy: ke,
+              mass: ball.mass,
               interactionRadius: ball.interactionRadius
             });
 
@@ -1197,18 +1480,22 @@ export default function App() {
               setExplanation("Fist detected ✊: Physics calculations frozen.");
               setFormulaTag("v = 0, a = 0 (Frozen)");
             } else if (currentForceMag > 0.15) {
-              setExplanation(`You pushed with ${currentForceMag.toFixed(1)} N. Acceleration a = F/m = ${(currentForceMag / ball.mass).toFixed(1)} m/s².`);
+              setExplanation(
+                `Net force ${currentForceMag.toFixed(1)} N applied. Acceleration a = F/m = ${(currentForceMag / ball.mass).toFixed(1)} m/s².`
+              );
               setFormulaTag("F = m · a");
             } else if (currentSpeedMag > 0.05) {
-              setExplanation(`Object moving at ${currentSpeedMag.toFixed(1)} m/s. Drag gradually slows it down.`);
+              setExplanation(
+                `Object moving at ${currentSpeedMag.toFixed(1)} m/s. Drag gradually slows it down.`
+              );
               setFormulaTag("F_drag = -b · v");
             } else {
-              setExplanation("Object is at rest. Bring your hand closer to apply external push force.");
+              setExplanation(
+                "Object is at rest in equilibrium. Move hand or adjust applied force to accelerate."
+              );
               setFormulaTag("Newton's 1st Law (Inertia)");
             }
-          }
-
-          else if (currentExp === "impulse") {
+          } else if (currentExp === "impulse") {
             const ball = simState.impulse;
             telemetryRef.current = {
               experimentName: "Impulse & Momentum Lab",
@@ -1222,7 +1509,9 @@ export default function App() {
               posY: Number(ball.y.toFixed(2)),
               displacement: 0,
               momentum: Number((ball.mass * currentSpeedMag).toFixed(2)),
-              kineticEnergy: Number((0.5 * ball.mass * currentSpeedMag * currentSpeedMag).toFixed(2)),
+              kineticEnergy: Number(
+                (0.5 * ball.mass * currentSpeedMag * currentSpeedMag).toFixed(2)
+              ),
               handSpeed: Number(maxHandSpeed.toFixed(3)),
               time: Number(totalSimTime.toFixed(1)),
               isFrozen: effectiveFrozen
@@ -1239,18 +1528,22 @@ export default function App() {
             });
 
             if (ball.isContact) {
-              setExplanation(`💥 Impact strike! Contact force: ${currentForceMag.toFixed(1)} N, accumulating impulse J.`);
+              setExplanation(
+                `💥 Impact strike! Contact force: ${currentForceMag.toFixed(1)} N, accumulating impulse J.`
+              );
               setFormulaTag("J = ∫ F dt");
             } else if (ball.impulseJ > 0) {
-              setExplanation(`Impulse delivered: J = ${ball.impulseJ.toFixed(2)} N·s produced momentum change Δp = ${ball.deltaP.toFixed(2)} kg·m/s.`);
+              setExplanation(
+                `Impulse delivered: J = ${ball.impulseJ.toFixed(2)} N·s produced momentum change Δp = ${ball.deltaP.toFixed(2)} kg·m/s.`
+              );
               setFormulaTag("J = Δp = m·v_f");
             } else {
-              setExplanation("Target ball at rest. Perform a quick hand swipe 💨 to strike with high impulse!");
+              setExplanation(
+                "Target ball at rest. Perform a quick hand swipe 💨 to strike with high impulse!"
+              );
               setFormulaTag("J = F_avg · Δt = Δp");
             }
-          }
-
-          else if (currentExp === "hooke") {
+          } else if (currentExp === "hooke") {
             const spring = simState.hooke;
             const u = 0.5 * spring.k * spring.x * spring.x;
             const ke = 0.5 * spring.mass * spring.vx * spring.vx;
@@ -1272,22 +1565,27 @@ export default function App() {
               potentialEnergy: u,
               kineticEnergy: ke,
               velocity: currentSpeedMag,
-              springK: spring.k
+              springK: spring.k,
+              mass: spring.mass
             });
 
             if (spring.isHandGrab) {
-              setExplanation(`Hand dragging spring: displacement x = ${spring.x.toFixed(2)} m. Spring tension opposes your hand.`);
+              setExplanation(
+                `Dragging spring: displacement x = ${spring.x.toFixed(2)} m. Restoring force opposes displacement.`
+              );
               setFormulaTag("F_spring = -k · x");
             } else if (Math.abs(spring.x) > 0.03) {
-              setExplanation(`Restoring force ${(-spring.k * spring.x).toFixed(1)} N pulls mass back to equilibrium. Oscillation in progress.`);
+              setExplanation(
+                `Restoring force ${(-spring.k * spring.x).toFixed(1)} N pulls mass back to center. Harmonic oscillation in progress.`
+              );
               setFormulaTag("a = -k/m · x");
             } else {
-              setExplanation("Spring is at center equilibrium (x = 0, F = 0). Grab or push the bob to stretch the coils!");
+              setExplanation(
+                "Spring at center equilibrium (x = 0, F = 0). Drag or push bob to stretch coils!"
+              );
               setFormulaTag("F = -k · x, U = ½kx²");
             }
-          }
-
-          else if (currentExp === "collision") {
+          } else if (currentExp === "collision") {
             const { b1, b2 } = simState.collision;
             const v1 = Math.sqrt(b1.vx * b1.vx + b1.vy * b1.vy);
             const v2 = Math.sqrt(b2.vx * b2.vx + b2.vy * b2.vy);
@@ -1312,22 +1610,28 @@ export default function App() {
               p1,
               p2,
               pTotal: pTot,
-              keTotal: keTot
+              keTotal: keTot,
+              mass: b1.mass,
+              mass2: b2.mass
             });
 
             if (v1 > 0.1 && v2 < 0.05) {
-              setExplanation(`Ball 1 moving forward with momentum p₁ = ${p1.toFixed(2)} kg·m/s approaching target Ball 2.`);
+              setExplanation(
+                `Ball 1 moving forward with momentum p₁ = ${p1.toFixed(2)} kg·m/s approaching target Ball 2.`
+              );
               setFormulaTag("p_tot = m₁v₁ + m₂v₂");
             } else if (v2 > 0.1) {
-              setExplanation(`Post-collision: Momentum transferred to Ball 2 (p₂ = ${p2.toFixed(2)}). Total momentum p_tot is conserved!`);
+              setExplanation(
+                `Collision result: Momentum conserved (p_tot = ${pTot.toFixed(2)} kg·m/s). Mode: ${currentCollisionType}.`
+              );
               setFormulaTag("m₁v₁ + m₂v₂ = m₁v₁' + m₂v₂'");
             } else {
-              setExplanation("Both balls at rest. Push Ball 1 toward Ball 2 to trigger an elastic collision!");
+              setExplanation(
+                "Both bodies at rest. Push Ball 1 toward Ball 2 to trigger an isolated collision!"
+              );
               setFormulaTag("Conservation of Momentum");
             }
-          }
-
-          else if (currentExp === "projectile") {
+          } else if (currentExp === "projectile") {
             const proj = simState.projectile;
             telemetryRef.current = {
               experimentName: "Projectile Motion",
@@ -1347,17 +1651,20 @@ export default function App() {
             });
 
             if (proj.isAirborne) {
-              setExplanation(`Projectile in parabolic flight! Horizontal speed v_x = ${(proj.vx).toFixed(1)} m/s is constant; gravity pulls downward.`);
+              setExplanation(
+                `Parabolic trajectory: horizontal speed ${(proj.vx).toFixed(1)} m/s is constant; gravity pulls downward.`
+              );
               setFormulaTag("y(t) = v₀y·t - ½gt²");
             } else {
-              setExplanation(`Aim angle ${proj.angle}° (adjust hand up/down). Theoretical range R = ${proj.range.toFixed(2)} m. Flick or tap Fire!`);
+              setExplanation(
+                `Aim angle ${proj.angle}°. Theoretical range R = ${proj.range.toFixed(2)} m. Flick hand or tap Fire!`
+              );
               setFormulaTag("R = (v₀² sin 2θ) / g");
             }
           }
 
           setActiveGesture(currentGesture);
 
-          // Update Physics Action Chain
           const isMoving = currentSpeedMag > 0.05;
           const isForce = currentForceMag > 0.15;
           const isAccel = currentAccelMag > 0.15;
@@ -1369,7 +1676,6 @@ export default function App() {
             isBallMoving: isMoving
           });
 
-          // Evaluate Physics Events
           const newEvents = evaluatePhysicsEvents(
             {
               force: currentForceMag,
@@ -1393,7 +1699,7 @@ export default function App() {
       animate();
 
       // =====================================================
-      // 9. MEDIAPIPE INITIALIZATION
+      // 10. MEDIAPIPE INITIALIZATION
       // =====================================================
       try {
         const vision = await FilesetResolver.forVisionTasks(
@@ -1430,6 +1736,9 @@ export default function App() {
       return () => {
         destroyed = true;
         window.removeEventListener("resize", resize);
+        canvas.removeEventListener("pointerdown", onPointerDown);
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
         cancelAnimationFrame(animationId);
         stream?.getTracks().forEach((t) => t.stop());
         renderer.dispose();
@@ -1458,6 +1767,7 @@ export default function App() {
         playsInline
         muted
         aria-hidden="true"
+        style={{ display: cameraEnabled ? "block" : "none" }}
       />
 
       {/* 2. GRID & VIGNETTE */}
@@ -1470,7 +1780,11 @@ export default function App() {
       {/* 4. LAB HEADER WITH EXPERIMENT SELECTOR & NAV */}
       <header className="lab-header">
         <div className="brand">
-          <Link to="/dashboard" className="lab-top-action-btn" title="Back to Dashboard">
+          <Link
+            to="/dashboard"
+            className="lab-top-action-btn"
+            title="Back to Dashboard"
+          >
             <ArrowLeft className="btn-icon-sm" />
             Dashboard
           </Link>
@@ -1486,7 +1800,10 @@ export default function App() {
 
         {/* Experiment Switcher Dropdown & Action Buttons */}
         <div className="lab-exp-selector-wrap">
-          <label htmlFor="exp-select-header" style={{ fontSize: '10px', color: '#7bb0c8', fontWeight: 700 }}>
+          <label
+            htmlFor="exp-select-header"
+            style={{ fontSize: "10px", color: "#7bb0c8", fontWeight: 700 }}
+          >
             LAB MODULE:
           </label>
           <select
@@ -1502,6 +1819,18 @@ export default function App() {
             ))}
           </select>
 
+          {/* Guided Mode Toggle */}
+          <button
+            type="button"
+            className={`lab-top-action-btn ${isGuidedModeOpen ? "active-quiz" : ""}`}
+            onClick={() => setIsGuidedModeOpen((g) => !g)}
+            title="Toggle step-by-step guided experiment mode"
+          >
+            <Compass className="btn-icon-sm" />
+            {isGuidedModeOpen ? "Guided Mode (Active)" : "Guided Mode"}
+          </button>
+
+          {/* How to Perform Modal */}
           <button
             type="button"
             className="lab-top-action-btn"
@@ -1512,20 +1841,65 @@ export default function App() {
             How to Perform
           </button>
 
+          {/* Quiz Button */}
           <button
             type="button"
-            className={`lab-top-action-btn ${quizScoreBadge !== null ? 'active-quiz' : ''}`}
+            className={`lab-top-action-btn ${quizScoreBadge !== null ? "active-quiz" : ""}`}
             onClick={() => setIsQuizOpen(true)}
             title="Take experiment mastery quiz"
           >
             <Award className="btn-icon-sm" />
             {quizScoreBadge !== null ? `Quiz (${quizScoreBadge}%)` : "Take Quiz"}
           </button>
+
+          {/* Lab Report Button */}
+          <button
+            type="button"
+            className="lab-top-action-btn"
+            onClick={() => setIsReportOpen(true)}
+            title="View & Print Official Physics Lab Report"
+          >
+            <FileText className="btn-icon-sm" />
+            Lab Report
+          </button>
+
+          {/* Hackathon Tour / Info */}
+          <button
+            type="button"
+            className="lab-top-action-btn"
+            onClick={() => setIsIntroOpen(true)}
+            title="Platform Overview & Demo Walkthrough"
+          >
+            <Info className="btn-icon-sm" />
+            About
+          </button>
         </div>
 
-        <div className="tracking-status">
-          <span className="status-dot" />
-          <span>HAND TRACKING ACTIVE</span>
+        {/* Camera Toggle & Status Indicator */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <button
+            type="button"
+            className="lab-top-action-btn"
+            onClick={() => setCameraEnabled((c) => !c)}
+            title={cameraEnabled ? "Disable webcam (use mouse mode)" : "Enable webcam"}
+          >
+            {cameraEnabled ? (
+              <Camera className="btn-icon-sm" />
+            ) : (
+              <CameraOff className="btn-icon-sm" />
+            )}
+            {cameraEnabled ? "Cam: ON" : "Cam: OFF"}
+          </button>
+
+          <div className={`tracking-status ${cameraStatus}`}>
+            <span className="status-dot" />
+            <span>
+              {cameraStatus === "active" && "HAND TRACKING ACTIVE"}
+              {cameraStatus === "lost" && "HAND OUTSIDE FRAME"}
+              {cameraStatus === "disabled" && "MOUSE MODE ACTIVE"}
+              {cameraStatus === "denied" && "CAM BLOCKED (MOUSE ACTIVE)"}
+            </span>
+          </div>
         </div>
       </header>
 
@@ -1533,52 +1907,101 @@ export default function App() {
       <div className="gesture-hud-panel" aria-label="Gestures Detected">
         <div className="panel-label">DETECTED GESTURE</div>
 
-        <div className={`gesture-item-row ${activeGesture === "PINCH" ? "detected" : ""}`}>
+        <div
+          className={`gesture-item-row ${activeGesture === "PINCH" ? "detected" : ""}`}
+        >
           <div className="gesture-symbol">🤏</div>
           <div className="gesture-text">
             <strong>Pinch</strong>
             <small>Adjust parameters / aim</small>
           </div>
-          {activeGesture === "PINCH" && <span className="gesture-active-badge">ACTIVE</span>}
+          {activeGesture === "PINCH" && (
+            <span className="gesture-active-badge">ACTIVE</span>
+          )}
         </div>
 
-        <div className={`gesture-item-row ${activeGesture === "MOVE_HAND" ? "detected" : ""}`}>
+        <div
+          className={`gesture-item-row ${activeGesture === "MOVE_HAND" ? "detected" : ""}`}
+        >
           <div className="gesture-symbol">🖐️</div>
           <div className="gesture-text">
-            <strong>Move Hand</strong>
+            <strong>Move Hand / Mouse</strong>
             <small>Apply push / drag force</small>
           </div>
-          {activeGesture === "MOVE_HAND" && <span className="gesture-active-badge">ACTIVE</span>}
+          {activeGesture === "MOVE_HAND" && (
+            <span className="gesture-active-badge">ACTIVE</span>
+          )}
         </div>
 
-        <div className={`gesture-item-row ${activeGesture === "FAST_MOTION" ? "detected" : ""}`}>
+        <div
+          className={`gesture-item-row ${activeGesture === "FAST_MOTION" ? "detected" : ""}`}
+        >
           <div className="gesture-symbol">💨</div>
           <div className="gesture-text">
-            <strong>Fast Motion</strong>
+            <strong>Fast Motion / Flick</strong>
             <small>High impulse shockwave</small>
           </div>
-          {activeGesture === "FAST_MOTION" && <span className="gesture-active-badge">IMPULSE</span>}
+          {activeGesture === "FAST_MOTION" && (
+            <span className="gesture-active-badge">IMPULSE</span>
+          )}
         </div>
 
-        <div className={`gesture-item-row ${activeGesture === "FIST" ? "detected fist-detected" : ""}`}>
+        <div
+          className={`gesture-item-row ${
+            activeGesture === "FIST" ? "detected fist-detected" : ""
+          }`}
+        >
           <div className="gesture-symbol">✊</div>
           <div className="gesture-text">
-            <strong>Fist</strong>
+            <strong>Fist / Spacebar</strong>
             <small>Freeze / pause physics</small>
           </div>
-          {activeGesture === "FIST" && <span className="gesture-active-badge" style={{ color: "#ff6b6b" }}>PAUSED</span>}
+          {activeGesture === "FIST" && (
+            <span
+              className="gesture-active-badge"
+              style={{ color: "#ff6b6b" }}
+            >
+              PAUSED
+            </span>
+          )}
         </div>
       </div>
 
-      {/* 6. PHYSICS ACTION CHAIN (TOP CENTER) */}
-      <PhysicsActionChain chainState={actionChain} activeExperimentId={activeExpId} />
+      {/* 6. GUIDED EXPERIMENT PANEL (OPTIONAL OVERLAY) */}
+      {isGuidedModeOpen && (
+        <GuidedExperimentPanel
+          experiment={activeExperiment}
+          physicsData={physicsState}
+          onLaunchQuiz={() => setIsQuizOpen(true)}
+          onResetSim={() => simControlsRef.current.resetSim?.(activeExpId)}
+          isPaused={isPaused}
+          onTogglePause={() => {
+            setIsPaused((p) => {
+              const next = !p;
+              simControlsRef.current.setIsPausedRef?.(next);
+              return next;
+            });
+          }}
+          onClose={() => setIsGuidedModeOpen(false)}
+        />
+      )}
 
-      {/* 7. REAL-TIME EXPLANATION BANNER (TOP CENTER) */}
-      <RealTimeExplanation explanation={explanation} formulaTag={formulaTag} />
+      {/* 7. PHYSICS ACTION CHAIN (TOP CENTER) */}
+      <PhysicsActionChain
+        chainState={actionChain}
+        activeExperimentId={activeExpId}
+      />
 
-      {/* 8. LIVE PHYSICS HUD (RIGHT) */}
+      {/* 8. REAL-TIME EXPLANATION BANNER (TOP CENTER) */}
+      <RealTimeExplanation
+        explanation={explanation}
+        formulaTag={formulaTag}
+      />
+
+      {/* 9. LIVE PHYSICS HUD WITH TELEMETRY & GRAPH TABS (RIGHT) */}
       <LivePhysicsHUD
         activeExperimentId={activeExpId}
+        activeExperiment={activeExperiment}
         physicsData={physicsState}
         mass={mass}
         onMassChange={setMass}
@@ -1590,7 +2013,13 @@ export default function App() {
         onLaunchAngleChange={setLaunchAngle}
         launchSpeed={launchSpeed}
         onLaunchSpeedChange={setLaunchSpeed}
+        appliedForceManual={appliedForceManual}
+        onAppliedForceManualChange={setAppliedForceManual}
+        collisionType={collisionType}
+        onToggleCollisionType={setCollisionType}
         onFireProjectile={() => simControlsRef.current.fireProjectile?.()}
+        onTriggerImpact={() => simControlsRef.current.triggerImpact?.()}
+        onLaunchBall1={() => simControlsRef.current.launchBall1?.()}
         onResetBall={() => simControlsRef.current.resetSim?.(activeExpId)}
         isPaused={isPaused}
         onTogglePause={() => {
@@ -1600,21 +2029,34 @@ export default function App() {
             return next;
           });
         }}
+        onOpenReport={() => setIsReportOpen(true)}
       />
 
-      {/* 9. LEARN PANEL (BOTTOM LEFT) */}
+      {/* 10. LEARN PANEL (BOTTOM LEFT) */}
       <LearnPanel activeExperimentId={activeExpId} />
 
-      {/* 10. PHYSICS EVENT TIMELINE (BOTTOM RIGHT) */}
-      <PhysicsEventTimeline events={eventsList} />
+      {/* 11. PHYSICS EVENT TIMELINE (BOTTOM RIGHT) */}
+      <PhysicsEventTimeline
+        events={eventsList}
+        onReset={() => simControlsRef.current.resetSim?.(activeExpId)}
+        isPaused={isPaused}
+        onTogglePause={() => {
+          setIsPaused((p) => {
+            const next = !p;
+            simControlsRef.current.setIsPausedRef?.(next);
+            return next;
+          });
+        }}
+        onOpenReport={() => setIsReportOpen(true)}
+      />
 
-      {/* 11. BOTTOM CONTROLS BAR */}
+      {/* 12. BOTTOM CONTROLS BAR */}
       <div className="experiment-controls-bar">
         <button
           type="button"
           className={`toggle-chip ${showVectors ? "active" : ""}`}
           onClick={() => setShowVectors((prev) => !prev)}
-          title="Toggle vector arrows"
+          title="Toggle vector arrows (Key: V)"
         >
           <span>📐</span> Vectors: {showVectors ? "ON" : "OFF"}
         </button>
@@ -1641,28 +2083,48 @@ export default function App() {
           type="button"
           className="toggle-chip"
           onClick={() => simControlsRef.current.resetSim?.(activeExpId)}
-          title="Reset active simulation"
+          title="Reset active simulation (Key: R)"
         >
           <span>↺</span> Reset Simulation
         </button>
       </div>
 
-      {/* 12. DR. NOVA AI TUTOR (FLOATING PANEL) */}
-      <PhysicsAssistant getLabSnapshot={getLabSnapshot} activeExperiment={activeExperiment} />
+      {/* 13. DR. NOVA AI TUTOR (FLOATING PANEL) */}
+      <PhysicsAssistant
+        getLabSnapshot={getLabSnapshot}
+        activeExperiment={activeExperiment}
+      />
 
-      {/* 13. HOW TO PERFORM MODAL */}
+      {/* 14. HOW TO PERFORM MODAL */}
       <HowToPerformModal
         experiment={activeExperiment}
         isOpen={isHowToOpen}
         onClose={() => setIsHowToOpen(false)}
       />
 
-      {/* 14. EXPERIMENT QUIZ MODAL */}
+      {/* 15. EXPERIMENT QUIZ MODAL */}
       <ExperimentQuizModal
         experiment={activeExperiment}
         isOpen={isQuizOpen}
         onClose={() => setIsQuizOpen(false)}
         onQuizCompleted={handleQuizCompleted}
+      />
+
+      {/* 16. OFFICIAL LAB REPORT MODAL */}
+      <LabReportModal
+        isOpen={isReportOpen}
+        onClose={() => setIsReportOpen(false)}
+        experiment={activeExperiment}
+        physicsData={physicsState}
+        quizResult={lastQuizResult || { score: quizScoreBadge || 100 }}
+        studentName={studentName}
+      />
+
+      {/* 17. PLATFORM DEMO & WALKTHROUGH MODAL */}
+      <ProjectIntroModal
+        isOpen={isIntroOpen}
+        onClose={() => setIsIntroOpen(false)}
+        onLaunchLab={handleSelectExperiment}
       />
     </div>
   );
