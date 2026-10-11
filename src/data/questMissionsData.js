@@ -10,30 +10,37 @@ export const QUEST_MISSIONS = {
       id: "newton_m1",
       expId: "newton",
       tier: "beginner",
-      title: "First Acceleration",
+      title: "Rescue Run: Target Delivery",
       badge: "🎯",
-      description: "Apply a gentle hand or manual force to accelerate the 1.0 kg mass between 2.0 and 4.5 m/s².",
-      targetCondition: "2.0 m/s² ≤ Acceleration ≤ 4.5 m/s²",
-      hint: "By Newton's 2nd Law, a = F/m. For m = 1.0 kg, an applied force between 2.0 N and 4.5 N achieves this.",
+      description: "Pilot the rescue supply cart along the track to reach the designated target docking zone (0.45m to 0.70m) or accelerate between 2.0 and 4.5 m/s².",
+      targetCondition: "Cart in Rescue Zone (0.45m - 0.70m) OR 2.0 ≤ a ≤ 4.5 m/s²",
+      hint: "By Newton's 2nd Law, a = F/m. Use forward thrusters to accelerate, then let drag or gentle braking bring the cart into the glowing target zone.",
       xpReward: 50,
       validate: (telemetry) => {
+        const x = Number(telemetry?.posX) || 0;
+        const v = Math.abs(Number(telemetry?.velocity) || 0);
         const a = Math.abs(Number(telemetry?.acceleration) || 0);
-        if (a >= 2.0 && a <= 4.5) {
-          return { success: true, progress: 100, message: `Target achieved! Measured acceleration: ${a.toFixed(2)} m/s².` };
+        const inZone = (x >= 0.42 && x <= 0.72 && v < 0.35) || telemetry?.inRescueZone;
+
+        if (inZone || (a >= 2.0 && a <= 4.5)) {
+          const reason = inZone
+            ? `Rescue cart docked successfully at X = ${x.toFixed(2)}m (v = ${v.toFixed(2)} m/s)!`
+            : `Target acceleration achieved: ${a.toFixed(2)} m/s².`;
+          return { success: true, progress: 100, message: reason };
         }
-        const progress = Math.min(95, Math.round((a / 2.0) * 100));
-        return { success: false, progress, message: `Current acceleration: ${a.toFixed(2)} m/s². Need 2.0 to 4.5 m/s².` };
+        const prog = inZone ? 100 : Math.min(95, Math.max(Math.round((a / 2.0) * 100), Math.round((Math.max(0, x) / 0.55) * 85)));
+        return { success: false, progress: prog, message: `Cart at X = ${x.toFixed(2)}m (a = ${a.toFixed(2)} m/s²). Guide into target zone (0.45m - 0.70m).` };
       }
     },
     {
       id: "newton_m2",
       expId: "newton",
       tier: "intermediate",
-      title: "Inertia Double-Down",
+      title: "Mass Mayhem: Heavy Payload",
       badge: "⚖️",
-      description: "Increase mass to 2.0 kg using the HUD slider and generate at least 5.0 N of applied force.",
-      targetCondition: "Mass = 2.0 kg & Net Force ≥ 5.0 N",
-      hint: "Greater inertia requires greater force to achieve the same acceleration.",
+      description: "Increase cart payload to 2.0 kg and generate at least 5.0 N of applied net force to overcome inertia.",
+      targetCondition: "Cart Mass = 2.0 kg & Net Force ≥ 5.0 N",
+      hint: "Greater payload mass resists acceleration (inertia). Notice cargo containers multiply on the cart bed as mass increases.",
       xpReward: 100,
       validate: (telemetry, physicsState) => {
         const m = Number(physicsState?.mass ?? telemetry?.mass) || 1.0;
@@ -42,32 +49,36 @@ export const QUEST_MISSIONS = {
         const forceOk = f >= 5.0;
 
         if (massOk && forceOk) {
-          return { success: true, progress: 100, message: `Inertia challenge complete! Mass: ${m.toFixed(1)} kg, Force: ${f.toFixed(1)} N.` };
+          return { success: true, progress: 100, message: `Heavy payload propelled! Cart mass: ${m.toFixed(1)} kg, Thrust force: ${f.toFixed(1)} N.` };
         }
         let prog = 0;
         if (massOk) prog += 50;
         if (forceOk) prog += 50;
         else prog += Math.min(45, Math.round((f / 5.0) * 50));
-        return { success: false, progress: prog, message: `Mass: ${m.toFixed(1)} kg (target 2.0 kg), Force: ${f.toFixed(1)} N (target ≥ 5.0 N).` };
+        return { success: false, progress: prog, message: `Cart mass: ${m.toFixed(1)} kg (target 2.0 kg), Force: ${f.toFixed(1)} N (target ≥ 5.0 N).` };
       }
     },
     {
       id: "newton_m3",
       expId: "newton",
       tier: "expert",
-      title: "Kinetic Momentum Surge",
+      title: "Emergency Braking & Surge",
       badge: "🚀",
-      description: "Achieve a system linear momentum p ≥ 4.0 kg·m/s through sustained net force.",
-      targetCondition: "Momentum p = m·v ≥ 4.0 kg·m/s",
-      hint: "Sustained net force increases velocity over time (F·Δt = Δp). Move your hand closer or increase applied force slider.",
+      description: "Execute emergency retro-braking on a moving cart or generate a system linear momentum p ≥ 4.0 kg·m/s.",
+      targetCondition: "Emergency Braking Executed OR Momentum p ≥ 4.0 kg·m/s",
+      hint: "Fire the reverse retro-thruster [▼] to apply opposing force (F < 0) to decelerate the cart rapidly, or maintain sustained forward thrust.",
       xpReward: 200,
       validate: (telemetry) => {
         const p = Math.abs(Number(telemetry?.momentum) || 0);
-        if (p >= 4.0) {
-          return { success: true, progress: 100, message: `Momentum surge achieved! Measured p: ${p.toFixed(2)} kg·m/s.` };
+        const isBraking = Boolean(telemetry?.isBraking || telemetry?.brakingActive);
+        if (isBraking || p >= 4.0) {
+          const reason = isBraking
+            ? "Emergency retro-thrusters deployed! Opposing net force decelerated the supply cart."
+            : `Momentum surge achieved! Measured p: ${p.toFixed(2)} kg·m/s.`;
+          return { success: true, progress: 100, message: reason };
         }
         const prog = Math.min(95, Math.round((p / 4.0) * 100));
-        return { success: false, progress: prog, message: `Current momentum: ${p.toFixed(2)} kg·m/s. Need ≥ 4.0 kg·m/s.` };
+        return { success: false, progress: prog, message: `Current momentum: ${p.toFixed(2)} kg·m/s. Deploy retro-brake [▼] or build p ≥ 4.0 kg·m/s.` };
       }
     }
   ],
@@ -77,16 +88,16 @@ export const QUEST_MISSIONS = {
       id: "impulse_m1",
       expId: "impulse",
       tier: "beginner",
-      title: "First Impact",
+      title: "Perfect Impact: Calibrated Pulse",
       badge: "💨",
-      description: "Execute a rapid hand swipe or trigger manual impact to deliver an impulse J ≥ 1.5 N·s.",
-      targetCondition: "Impulse J ≥ 1.5 N·s",
-      hint: "Fast hand movement triggers the shockwave threshold. A quick swipe transfers instant momentum.",
+      description: "Trigger the hydraulic impact piston or execute a rapid hand swipe to deliver an impulse J ≥ 1.5 N·s.",
+      targetCondition: "Delivered Impulse J ≥ 1.5 N·s",
+      hint: "By J = F·Δt = Δp, configure strike force and contact duration or swipe fast to transfer instant momentum to the kinetic probe.",
       xpReward: 50,
       validate: (telemetry) => {
         const J = Math.abs(Number(telemetry?.impulseJ) || 0);
         if (J >= 1.5) {
-          return { success: true, progress: 100, message: `Impulse delivered! J = ${J.toFixed(2)} N·s.` };
+          return { success: true, progress: 100, message: `Perfect impact calibrated! Delivered impulse: J = ${J.toFixed(2)} N·s.` };
         }
         const prog = Math.min(95, Math.round((J / 1.5) * 100));
         return { success: false, progress: prog, message: `Current impulse: ${J.toFixed(2)} N·s. Target: ≥ 1.5 N·s.` };
@@ -96,39 +107,45 @@ export const QUEST_MISSIONS = {
       id: "impulse_m2",
       expId: "impulse",
       tier: "intermediate",
-      title: "Momentum Transfer",
+      title: "Soft Landing & Momentum Rescue",
       badge: "⚡",
-      description: "Accelerate the ball to a velocity v ≥ 3.0 m/s using an impulse collision.",
-      targetCondition: "Final Velocity v ≥ 3.0 m/s",
-      hint: "By the Impulse-Momentum Theorem, J = Δp = m·v. Greater impulse creates higher exit speed.",
+      description: "Accelerate the kinetic probe to v ≥ 3.0 m/s or achieve a cushioned soft landing with contact duration Δt ≥ 120 ms.",
+      targetCondition: "Probe Velocity v ≥ 3.0 m/s OR Contact Time Δt ≥ 120 ms",
+      hint: "By extending contact duration Δt, the same momentum change occurs with dramatically lower peak force—the principle behind airbags and cushions!",
       xpReward: 100,
       validate: (telemetry) => {
         const v = Math.abs(Number(telemetry?.velocity) || 0);
-        if (v >= 3.0) {
-          return { success: true, progress: 100, message: `High velocity achieved! v = ${v.toFixed(2)} m/s.` };
+        const dt = (Number(telemetry?.contactTime) || 0) * 1000;
+        const softLanding = dt >= 120 && Number(telemetry?.impulseJ) > 0.5;
+
+        if (v >= 3.0 || softLanding) {
+          const reason = softLanding
+            ? `Soft landing achieved! Deceleration cushioned over ${dt.toFixed(0)} ms.`
+            : `Probe velocity achieved! Exit speed v = ${v.toFixed(2)} m/s.`;
+          return { success: true, progress: 100, message: reason };
         }
-        const prog = Math.min(95, Math.round((v / 3.0) * 100));
-        return { success: false, progress: prog, message: `Current speed: ${v.toFixed(2)} m/s. Target: ≥ 3.0 m/s.` };
+        const prog = Math.min(95, Math.max(Math.round((v / 3.0) * 100), Math.round((dt / 120) * 90)));
+        return { success: false, progress: prog, message: `Current speed: ${v.toFixed(2)} m/s, Δt: ${dt.toFixed(0)} ms. Target: v ≥ 3.0 m/s or Δt ≥ 120 ms.` };
       }
     },
     {
       id: "impulse_m3",
       expId: "impulse",
       tier: "expert",
-      title: "Peak Force Shockwave",
+      title: "Peak Force Shockwave Surge",
       badge: "💥",
-      description: "Deliver a high-intensity shockwave with peak force F_peak ≥ 20.0 N and impulse J ≥ 3.5 N·s.",
-      targetCondition: "Peak Force ≥ 20.0 N & J ≥ 3.5 N·s",
-      hint: "Click 'Simulate Rapid Impact' in the HUD or perform a lightning-fast hand swipe across the webcam.",
+      description: "Trigger a high-intensity impact chamber shockwave with peak force F_peak ≥ 20.0 N and impulse J ≥ 3.5 N·s.",
+      targetCondition: "Peak Force ≥ 20.0 N & Impulse J ≥ 3.5 N·s",
+      hint: "Set high strike force in the HUD or perform an explosive hand swipe across the sensor field.",
       xpReward: 200,
       validate: (telemetry) => {
         const f = Math.abs(Number(telemetry?.peakForce || telemetry?.force) || 0);
         const J = Math.abs(Number(telemetry?.impulseJ) || 0);
         if (f >= 20.0 && J >= 3.5) {
-          return { success: true, progress: 100, message: `Shockwave mastered! F_peak: ${f.toFixed(1)} N, J: ${J.toFixed(2)} N·s.` };
+          return { success: true, progress: 100, message: `Impact shockwave mastered! F_peak: ${f.toFixed(1)} N, J: ${J.toFixed(2)} N·s.` };
         }
         const prog = Math.min(95, Math.round(((f / 20.0) * 0.5 + (J / 3.5) * 0.5) * 100));
-        return { success: false, progress: prog, message: `Peak force: ${f.toFixed(1)} N (need 20 N), J: ${J.toFixed(2)} N·s (need 3.5 N·s).` };
+        return { success: false, progress: prog, message: `Peak force: ${f.toFixed(1)} N (target 20 N), J: ${J.toFixed(2)} N·s (target 3.5 N·s).` };
       }
     }
   ],
@@ -198,52 +215,52 @@ export const QUEST_MISSIONS = {
       id: "collision_m1",
       expId: "collision",
       tier: "beginner",
-      title: "Equal Mass Transfer",
+      title: "Trajectory Tactician: Target Dock",
       badge: "⚪",
-      description: "Launch Cart 1 at resting Cart 2 with m1 = m2 = 1.0 kg in Elastic mode.",
-      targetCondition: "Cart 2 Speed v2 ≥ 2.0 m/s after elastic impact",
-      hint: "Click 'Launch Cart 1' in the HUD with both masses set to 1.0 kg.",
+      description: "Launch Striker Pod 1 at Target Drone 2 in Elastic mode to transfer kinetic energy and project Drone 2 to speed v2 ≥ 2.0 m/s.",
+      targetCondition: "Drone 2 Speed v2 ≥ 2.0 m/s after elastic impact",
+      hint: "In an elastic collision (e = 1.0), when m1 = m2, Striker Pod comes to an immediate halt and transfers 100% of its speed to Drone 2!",
       xpReward: 50,
       validate: (telemetry) => {
         const v2 = Math.abs(Number(telemetry?.v2) || 0);
         if (v2 >= 2.0) {
-          return { success: true, progress: 100, message: `Velocity transferred! Cart 2 speed = ${v2.toFixed(2)} m/s.` };
+          return { success: true, progress: 100, message: `Trajectory tactician success! Target Drone speed v2 = ${v2.toFixed(2)} m/s.` };
         }
         const prog = Math.min(95, Math.round((v2 / 2.0) * 100));
-        return { success: false, progress: prog, message: `Cart 2 speed: ${v2.toFixed(2)} m/s. Target: ≥ 2.0 m/s.` };
+        return { success: false, progress: prog, message: `Target Drone speed: ${v2.toFixed(2)} m/s. Target: ≥ 2.0 m/s.` };
       }
     },
     {
       id: "collision_m2",
       expId: "collision",
       tier: "intermediate",
-      title: "Inelastic Coupling",
+      title: "Inelastic Coupling: Magnetic Latch",
       badge: "🔗",
-      description: "Switch to Inelastic mode and collide carts so they move together at v_common ≥ 1.2 m/s.",
+      description: "Switch to Inelastic mode (e = 0.0) and collide pods so they latch magnetically and move together at v_common ≥ 1.2 m/s.",
       targetCondition: "Inelastic Mode & Shared Speed v ≥ 1.2 m/s",
-      hint: "In an inelastic collision, carts stick together and share common velocity: v = (m1·v1)/(m1+m2).",
+      hint: "In a perfectly inelastic collision, momentum is conserved but kinetic energy is dissipated: v_common = (m1·v1 + m2·v2)/(m1+m2).",
       xpReward: 100,
       validate: (telemetry, physicsState) => {
-        const mode = physicsState?.collisionType || "elastic";
+        const mode = physicsState?.collisionType || "inelastic";
         const v1 = Math.abs(Number(telemetry?.v1) || 0);
         const v2 = Math.abs(Number(telemetry?.v2) || 0);
         const isCoupled = Math.abs(v1 - v2) < 0.25 && v1 >= 1.2;
 
         if (mode === "inelastic" && isCoupled) {
-          return { success: true, progress: 100, message: `Inelastic coupling verified! Common speed: ${v1.toFixed(2)} m/s.` };
+          return { success: true, progress: 100, message: `Magnetic latch coupled! Shared velocity: ${v1.toFixed(2)} m/s (KE converted to deformation).` };
         }
-        return { success: false, progress: mode === "inelastic" ? 60 : 20, message: `Mode: ${mode}. Set mode to 'Inelastic' and launch Cart 1.` };
+        return { success: false, progress: mode === "inelastic" ? 60 : 20, message: `Mode: ${mode}. Set mode to 'Inelastic' and launch Striker Pod.` };
       }
     },
     {
       id: "collision_m3",
       expId: "collision",
       tier: "expert",
-      title: "Heavy Projector Momentum",
+      title: "Crash Investigation: Asymmetric Surge",
       badge: "🚂",
-      description: "Set Cart 1 mass = 2.0 kg and Cart 2 = 1.0 kg in Elastic mode. Achieve total momentum p_total ≥ 3.5 kg·m/s.",
+      description: "Configure heavy Striker Pod (m1 = 2.0 kg) and light Drone (m2 = 1.0 kg) in Elastic mode. Achieve system total momentum p_total ≥ 3.5 kg·m/s.",
       targetCondition: "m1 = 2.0 kg, m2 = 1.0 kg & p_total ≥ 3.5 kg·m/s",
-      hint: "When m1 > m2, Cart 1 continues moving forward after collision while Cart 2 shoots forward even faster!",
+      hint: "When m1 > m2, Striker Pod continues advancing after collision while Target Drone is catapulted ahead at high speed!",
       xpReward: 200,
       validate: (telemetry, physicsState) => {
         const m1 = Number(physicsState?.mass) || 1.0;
@@ -252,11 +269,11 @@ export const QUEST_MISSIONS = {
         const massesOk = m1 >= 1.9 && m2 <= 1.1;
 
         if (massesOk && p >= 3.5) {
-          return { success: true, progress: 100, message: `Heavy projector verified! p_total = ${p.toFixed(2)} kg·m/s.` };
+          return { success: true, progress: 100, message: `Crash forensics verified! System momentum conserved at p_total = ${p.toFixed(2)} kg·m/s.` };
         }
         let prog = massesOk ? 50 : 25;
         if (p >= 3.5) prog += 50;
-        return { success: false, progress: prog, message: `Mass ratio m1/m2: ${m1}/${m2} (need 2.0/1.0 kg), Momentum: ${p.toFixed(2)} kg·m/s.` };
+        return { success: false, progress: prog, message: `Mass configuration m1/m2: ${m1.toFixed(1)}/${m2.toFixed(1)} kg, Momentum: ${p.toFixed(2)} kg·m/s.` };
       }
     }
   ],

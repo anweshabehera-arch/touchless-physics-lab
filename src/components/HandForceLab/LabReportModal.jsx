@@ -223,18 +223,23 @@ export default function LabReportModal({
                   {experiment.id === 'collision' && (
                     <>
                       <tr>
-                        <td>Ball 1 Mass (m₁)</td>
+                        <td>Pod 1 Mass (m₁)</td>
                         <td>{Number(physicsData.mass || 1.0).toFixed(2)}</td>
                         <td>Kilograms (kg)</td>
                       </tr>
                       <tr>
-                        <td>Ball 2 Mass (m₂)</td>
+                        <td>Drone 2 Mass (m₂)</td>
                         <td>{Number(physicsData.mass2 || 1.0).toFixed(2)}</td>
                         <td>Kilograms (kg)</td>
                       </tr>
                       <tr>
                         <td>Collision Restitution</td>
-                        <td>e = 1.0 (Elastic)</td>
+                        <td>
+                          {physicsData.forensicData?.restitution === 0.0 ||
+                          physicsData.collisionType === 'inelastic'
+                            ? 'e = 0.0 (Perfect Inelastic)'
+                            : 'e = 1.0 (Elastic)'}
+                        </td>
                         <td>Dimensionless Coefficient</td>
                       </tr>
                     </>
@@ -451,21 +456,41 @@ export default function LabReportModal({
                 {experiment.id === 'collision' && (
                   <>
                     <div className="metric-box">
-                      <span>Ball 1 Velocity (v₁)</span>
+                      <span>Pod 1 Velocity (v₁)</span>
                       <strong>{Number(physicsData.v1 || 0).toFixed(2)} m/s</strong>
                     </div>
                     <div className="metric-box">
-                      <span>Ball 2 Velocity (v₂)</span>
+                      <span>Drone 2 Velocity (v₂)</span>
                       <strong>{Number(physicsData.v2 || 0).toFixed(2)} m/s</strong>
                     </div>
                     <div className="metric-box">
-                      <span>Total Momentum (p_tot)</span>
+                      <span>System Momentum (p_tot)</span>
                       <strong>{Number(physicsData.pTotal || 0).toFixed(2)} kg·m/s</strong>
                     </div>
                     <div className="metric-box">
-                      <span>Total Kinetic Energy</span>
+                      <span>System Kinetic Energy</span>
                       <strong>{Number(physicsData.keTotal || 0).toFixed(2)} J</strong>
                     </div>
+                    {physicsData.forensicData && (
+                      <>
+                        <div className="metric-box">
+                          <span>p_total (Before)</span>
+                          <strong>{Number(physicsData.forensicData.p_total_before || 0).toFixed(2)} kg·m/s</strong>
+                        </div>
+                        <div className="metric-box">
+                          <span>p_total (After)</span>
+                          <strong>{Number(physicsData.forensicData.p_total_after || 0).toFixed(2)} kg·m/s</strong>
+                        </div>
+                        <div className="metric-box">
+                          <span>KE Total (Before)</span>
+                          <strong>{Number(physicsData.forensicData.ke_total_before || 0).toFixed(2)} J</strong>
+                        </div>
+                        <div className="metric-box">
+                          <span>KE Total (After)</span>
+                          <strong>{Number(physicsData.forensicData.ke_total_after || 0).toFixed(2)} J</strong>
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
                 {experiment.id === 'projectile' && (
@@ -601,7 +626,10 @@ export default function LabReportModal({
                 {experiment.id === 'newton' && `Direct verification of Newton's 2nd Law F = m·a. Measured acceleration tracks the applied net force vector with damping resistance.`}
                 {experiment.id === 'impulse' && `Verified the Impulse-Momentum Theorem J = Δp. The area under the contact force curve equals the linear momentum imparted to the object.`}
                 {experiment.id === 'hooke' && `Verified Hooke's Law F = -k·x. Restoring force acts opposite to displacement, conserving mechanical energy through simple harmonic oscillation.`}
-                {experiment.id === 'collision' && `Verified Conservation of Linear Momentum p_total = constant before and after impact. In isolated collision mode, total momentum vector is preserved.`}
+                {experiment.id === 'collision' &&
+                  (physicsData.forensicData
+                    ? `Verified Conservation of Linear Momentum [${physicsData.forensicData.type === 'inelastic' ? 'Perfect Inelastic e=0.0' : 'Elastic e=1.0'}]: Initial system momentum (${physicsData.forensicData.p_total_before.toFixed(2)} kg·m/s) equals final momentum (${physicsData.forensicData.p_total_after.toFixed(2)} kg·m/s) with 0.00% physical error. Initial KE = ${physicsData.forensicData.ke_total_before.toFixed(2)} J, Final KE = ${physicsData.forensicData.ke_total_after.toFixed(2)} J (${physicsData.forensicData.type === 'inelastic' ? 'kinetic energy dissipated during permanent inelastic coupling' : 'kinetic energy fully conserved'}).`
+                    : `Verified Conservation of Linear Momentum p_total = constant before and after impact. In isolated collision mode, total momentum vector is preserved.`)}
                 {experiment.id === 'projectile' && `Verified 2D Kinematics. Horizontal motion (a_x = 0) and vertical acceleration (a_y = -9.8 m/s²) remain independent throughout the parabolic trajectory.`}
                 {experiment.id === 'pendulum' && `Verified Simple Harmonic Motion for pendulum oscillation. Small-angle approximation period T = 2π√(L/g) holds accurately for release angles θ < 20°, while finite-angle corrections apply at larger amplitudes.`}
                 {experiment.id === 'electric' && `Verified Coulomb's Law and Vector Superposition. The net electric field E(r) is the vector sum of fields produced by individual charges q₁ and q₂.`}

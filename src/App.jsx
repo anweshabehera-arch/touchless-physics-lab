@@ -99,6 +99,11 @@ export default function App() {
   const [launchAngle, setLaunchAngle] = useState(45); // degrees (Projectile)
   const [launchSpeed, setLaunchSpeed] = useState(5.0); // m/s (Projectile)
   const [appliedForceManual, setAppliedForceManual] = useState(0); // N (Manual Force for Newton)
+  const [strikeForce, setStrikeForce] = useState(25.0); // N (Impulse Rush)
+  const [strikeDuration, setStrikeDuration] = useState(80); // ms (Impulse Rush)
+  const [strikeDirection, setStrikeDirection] = useState(1); // +1 forward or -1 reverse (Impulse Rush)
+  const [v1Init, setV1Init] = useState(3.5); // m/s (Collision Chaos)
+  const [v2Init, setV2Init] = useState(0.0); // m/s (Collision Chaos)
   const [collisionType, setCollisionType] = useState("elastic"); // 'elastic' | 'inelastic'
   const [isPaused, setIsPaused] = useState(false);
   const [showVectors, setShowVectors] = useState(true);
@@ -265,7 +270,12 @@ export default function App() {
     mass,
     pendulumAngle,
     showInvisible,
-    showVectors
+    showVectors,
+    strikeForce,
+    strikeDuration,
+    strikeDirection,
+    v1Init,
+    v2Init
   });
 
   useEffect(() => {
@@ -277,7 +287,12 @@ export default function App() {
       mass,
       pendulumAngle,
       showInvisible,
-      showVectors
+      showVectors,
+      strikeForce,
+      strikeDuration,
+      strikeDirection,
+      v1Init,
+      v2Init
     };
   }, [
     appliedForceManual,
@@ -287,7 +302,12 @@ export default function App() {
     mass,
     pendulumAngle,
     showInvisible,
-    showVectors
+    showVectors,
+    strikeForce,
+    strikeDuration,
+    strikeDirection,
+    v1Init,
+    v2Init
   ]);
 
   // Safe snapshot getter for Dr. Nova AI
@@ -435,7 +455,7 @@ export default function App() {
     simControlsRef.current.setInclineMuKineticRef?.(inclineMuKinetic);
   }, [inclineMuKinetic]);
 
-  // Keyboard Shortcuts (Space: Pause/Fire, R: Reset, G: Guided, V: Vectors)
+  // Keyboard Shortcuts (Space: Pause/Fire/Launch, Arrows/WASD: Thruster/Brake, P: Replay, R: Reset, G: Guided, V: Vectors)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (
@@ -449,12 +469,32 @@ export default function App() {
         e.preventDefault();
         if (activeExpId === "projectile" && !physicsState.isAirborne) {
           simControlsRef.current.fireProjectile?.();
+        } else if (activeExpId === "impulse") {
+          simControlsRef.current.triggerImpact?.();
+        } else if (activeExpId === "collision") {
+          simControlsRef.current.launchCollision?.();
         } else {
           setIsPaused((p) => {
             const next = !p;
             simControlsRef.current.setIsPausedRef?.(next);
             return next;
           });
+        }
+      } else if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
+        if (activeExpId === "newton") {
+          simControlsRef.current.thrustCart?.(18.0);
+        }
+      } else if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
+        if (activeExpId === "newton") {
+          simControlsRef.current.brakeCart?.(24.0);
+        }
+      } else if (e.key === "s" || e.key === "S") {
+        if (activeExpId === "newton") {
+          simControlsRef.current.stopCart?.();
+        }
+      } else if (e.key === "p" || e.key === "P") {
+        if (activeExpId === "collision") {
+          simControlsRef.current.replayCollision?.();
         }
       } else if (e.key === "r" || e.key === "R") {
         simControlsRef.current.resetSim?.(activeExpId);
@@ -573,9 +613,9 @@ export default function App() {
 
     // Simulation Physics State
     const simState = {
-      // 1. Newton's 2nd Law Object
+      // 1. Newton's 2nd Law: Force Arena Rescue Cart
       newton: {
-        x: 0,
+        x: -0.65,
         y: 0,
         vx: 0,
         vy: 0,
@@ -583,11 +623,15 @@ export default function App() {
         ay: 0,
         mass: 1.0,
         radius: 0.08,
-        interactionRadius: 0.55
+        interactionRadius: 0.55,
+        isBraking: false,
+        isThrusting: false,
+        inRescueZone: false,
+        dockTargetX: 0.58
       },
-      // 2. Impulse & Momentum Target
+      // 2. Impulse & Momentum: Impulse Rush Impact Chamber
       impulse: {
-        x: 0,
+        x: -0.20,
         y: 0,
         vx: 0,
         vy: 0,
@@ -597,7 +641,14 @@ export default function App() {
         peakForce: 0,
         impulseJ: 0,
         deltaP: 0,
-        isContact: false
+        isContact: false,
+        pistonX: -0.65,
+        pistonActive: false,
+        pistonTimer: 0,
+        strikeForce: 25.0,
+        contactDuration: 0.08,
+        strikeDir: 1,
+        shockwaveOpacity: 0
       },
       // 3. Hooke's Law Spring Bob
       hooke: {
@@ -609,13 +660,19 @@ export default function App() {
         radius: 0.08,
         isHandGrab: false
       },
-      // 4. Collision Two Bodies
+      // 4. Collision Strategy Arena: Striker Pod & Target Drone
       collision: {
-        b1: { x: -0.45, y: 0, vx: 0, vy: 0, mass: 1.0, radius: 0.075 },
-        b2: { x: 0.35, y: 0, vx: 0, vy: 0, mass: 1.0, radius: 0.075 },
+        b1: { x: -0.55, y: 0, vx: 0, vy: 0, mass: 1.0, radius: 0.08 },
+        b2: { x: 0.20, y: 0, vx: 0, vy: 0, mass: 1.0, radius: 0.08 },
         pTotal: 0,
         keTotal: 0,
-        keInitial: 0
+        keInitial: 0,
+        collisionOccurred: false,
+        forensicData: null,
+        targetReached: false,
+        replayBuffer: [],
+        isReplaying: false,
+        replayIndex: 0
       },
       // 5. Projectile Motion Cannon & Ball
       projectile: {
@@ -806,14 +863,17 @@ export default function App() {
 
     const resetSimulation = (expId = activeExpIdRef.current) => {
       if (expId === "newton") {
-        simState.newton.x = 0;
+        simState.newton.x = -0.65;
         simState.newton.y = 0;
         simState.newton.vx = 0;
         simState.newton.vy = 0;
         simState.newton.ax = 0;
         simState.newton.ay = 0;
+        simState.newton.isBraking = false;
+        simState.newton.isThrusting = false;
+        simState.newton.inRescueZone = false;
       } else if (expId === "impulse") {
-        simState.impulse.x = 0;
+        simState.impulse.x = -0.20;
         simState.impulse.y = 0;
         simState.impulse.vx = 0;
         simState.impulse.vy = 0;
@@ -822,19 +882,29 @@ export default function App() {
         simState.impulse.impulseJ = 0;
         simState.impulse.deltaP = 0;
         simState.impulse.isContact = false;
+        simState.impulse.pistonX = -0.65;
+        simState.impulse.pistonActive = false;
+        simState.impulse.pistonTimer = 0;
+        simState.impulse.shockwaveOpacity = 0;
       } else if (expId === "hooke") {
         simState.hooke.x = 0.25;
         simState.hooke.vx = 0;
         simState.hooke.ax = 0;
       } else if (expId === "collision") {
-        simState.collision.b1.x = -0.45;
+        simState.collision.b1.x = -0.55;
         simState.collision.b1.y = 0;
         simState.collision.b1.vx = 0;
         simState.collision.b1.vy = 0;
-        simState.collision.b2.x = 0.35;
+        simState.collision.b2.x = 0.20;
         simState.collision.b2.y = 0;
         simState.collision.b2.vx = 0;
         simState.collision.b2.vy = 0;
+        simState.collision.collisionOccurred = false;
+        simState.collision.forensicData = null;
+        simState.collision.targetReached = false;
+        simState.collision.isReplaying = false;
+        simState.collision.replayIndex = 0;
+        simState.collision.replayBuffer = [];
       } else if (expId === "projectile") {
         simState.projectile.isAirborne = false;
         simState.projectile.x = simState.projectile.startX;
@@ -861,6 +931,95 @@ export default function App() {
 
     simControlsRef.current.resetSim = resetSimulation;
 
+    // Game 1: Force Arena Cart controls
+    simControlsRef.current.thrustCart = (f = 18.0) => {
+      const b = simState.newton;
+      b.isThrusting = true;
+      b.isBraking = false;
+      b.thrustForce = f;
+      b.vx += (f / b.mass) * 0.04;
+    };
+    simControlsRef.current.brakeCart = (f = 24.0) => {
+      const b = simState.newton;
+      b.isBraking = true;
+      b.isThrusting = false;
+      b.brakeForce = f;
+      if (b.vx > 0.05) {
+        b.vx = Math.max(0, b.vx - (f / b.mass) * 0.05);
+      }
+    };
+    simControlsRef.current.stopCart = () => {
+      const b = simState.newton;
+      b.vx = 0;
+      b.vy = 0;
+      b.ax = 0;
+      b.ay = 0;
+      b.isThrusting = false;
+      b.isBraking = false;
+    };
+
+    // Game 2: Impulse Rush Impact Piston controls
+    simControlsRef.current.triggerImpact = (force, durationMs, dir) => {
+      const b = simState.impulse;
+      const f = Number(force ?? settingsRef.current.strikeForce) || 25.0;
+      const dtSec = Math.max(0.02, (Number(durationMs ?? settingsRef.current.strikeDuration) || 80) / 1000);
+      const sign = (dir ?? settingsRef.current.strikeDirection) < 0 ? -1 : 1;
+      b.strikeForce = f;
+      b.contactDuration = dtSec;
+      b.strikeDir = sign;
+      b.pistonActive = true;
+      b.pistonTimer = 0;
+    };
+    simControlsRef.current.softLandingTest = () => {
+      const b = simState.impulse;
+      b.strikeForce = 12.0;
+      b.contactDuration = 0.15; // 150 ms (>= 120ms)
+      b.strikeDir = 1;
+      b.pistonActive = true;
+      b.pistonTimer = 0;
+      setStrikeForce(12.0);
+      setStrikeDuration(150);
+    };
+    simControlsRef.current.compareImpulses = () => {
+      const b = simState.impulse;
+      b.strikeForce = 40.0;
+      b.contactDuration = 0.05; // 40 N * 0.05 s = 2.0 N·s
+      b.strikeDir = 1;
+      b.pistonActive = true;
+      b.pistonTimer = 0;
+      setStrikeForce(40.0);
+      setStrikeDuration(50);
+    };
+
+    // Game 3: Collision Chaos controls
+    simControlsRef.current.launchCollision = (v1, v2) => {
+      const { b1, b2 } = simState.collision;
+      const actualV1 = v1 !== undefined ? Number(v1) : settingsRef.current.v1Init;
+      const actualV2 = v2 !== undefined ? Number(v2) : settingsRef.current.v2Init;
+      b1.x = -0.55;
+      b1.y = 0;
+      b1.vx = Number.isFinite(actualV1) ? actualV1 : 3.5;
+      b1.vy = 0;
+      b2.x = 0.20;
+      b2.y = 0;
+      b2.vx = Number.isFinite(actualV2) ? actualV2 : 0.0;
+      b2.vy = 0;
+      simState.collision.collisionOccurred = false;
+      simState.collision.targetReached = false;
+      simState.collision.replayBuffer = [];
+      simState.collision.isReplaying = false;
+      simState.collision.replayIndex = 0;
+    };
+    simControlsRef.current.replayCollision = () => {
+      if (simState.collision.replayBuffer && simState.collision.replayBuffer.length > 5) {
+        simState.collision.isReplaying = true;
+        simState.collision.replayIndex = 0;
+      }
+    };
+    simControlsRef.current.launchBall1 = () => {
+      simControlsRef.current.launchCollision?.(3.5, 0);
+    };
+
     simControlsRef.current.fireProjectile = () => {
       const p = simState.projectile;
       const rad = (p.angle * Math.PI) / 180;
@@ -873,21 +1032,6 @@ export default function App() {
         p.startY + Math.pow(p.v0 * Math.sin(rad), 2) / (2 * p.gravity);
       p.range = (Math.pow(p.v0, 2) * Math.sin(2 * rad)) / p.gravity;
       p.isAirborne = true;
-    };
-
-    simControlsRef.current.triggerImpact = () => {
-      const b = simState.impulse;
-      b.vx = 4.8 / b.mass;
-      b.peakForce = 24.5;
-      b.contactTime = 0.08;
-      b.impulseJ = 4.8;
-      b.deltaP = 4.8;
-    };
-
-    simControlsRef.current.launchBall1 = () => {
-      const { b1 } = simState.collision;
-      b1.vx = 3.6;
-      b1.vy = 0;
     };
 
     const start = async () => {
@@ -1007,13 +1151,241 @@ export default function App() {
         return { group, core, body, aura };
       };
 
-      // --- Group 1: Newton's Ball ---
-      const newtonMesh = createGlowSphere(0.08, 0x38d9ff);
-      scene.add(newtonMesh.group);
+      // --- Group 1: FORCE ARENA (The Acceleration Architect) ---
+      const forceArenaGroup = new THREE.Group();
 
-      // --- Group 2: Impulse Target Ball ---
-      const impulseMesh = createGlowSphere(0.08, 0xffa038);
-      scene.add(impulseMesh.group);
+      // Track Rails
+      const railGeom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-0.95, -0.06, 0),
+        new THREE.Vector3(0.95, -0.06, 0)
+      ]);
+      const railLine1 = new THREE.Line(
+        railGeom,
+        new THREE.LineBasicMaterial({ color: 0x167cff, transparent: true, opacity: 0.7 })
+      );
+      const railLine2 = new THREE.Line(
+        railGeom.clone().translate(0, 0.12, 0),
+        new THREE.LineBasicMaterial({ color: 0x167cff, transparent: true, opacity: 0.7 })
+      );
+      forceArenaGroup.add(railLine1);
+      forceArenaGroup.add(railLine2);
+
+      // Rescue Dock Target Zone Platform at x = 0.58
+      const dockPlatform = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.24, 0.22),
+        new THREE.MeshBasicMaterial({
+          color: 0x00e5ff,
+          transparent: true,
+          opacity: 0.18,
+          side: THREE.DoubleSide
+        })
+      );
+      dockPlatform.position.set(0.58, 0, 0);
+      forceArenaGroup.add(dockPlatform);
+
+      const dockBorder = new THREE.LineLoop(
+        new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(0.46, -0.11, 0),
+          new THREE.Vector3(0.70, -0.11, 0),
+          new THREE.Vector3(0.70, 0.11, 0),
+          new THREE.Vector3(0.46, 0.11, 0)
+        ]),
+        new THREE.LineBasicMaterial({ color: 0x31f2a1, linewidth: 2 })
+      );
+      forceArenaGroup.add(dockBorder);
+
+      // Docking Beacon Ring
+      const dockBeacon = new THREE.Mesh(
+        new THREE.RingGeometry(0.04, 0.07, 24),
+        new THREE.MeshBasicMaterial({
+          color: 0x31f2a1,
+          transparent: true,
+          opacity: 0.6,
+          side: THREE.DoubleSide
+        })
+      );
+      dockBeacon.position.set(0.58, 0, 0.01);
+      forceArenaGroup.add(dockBeacon);
+
+      // Emergency Braking Hazard Zone Markers (x: 0.32 to 0.44)
+      const brakeHazard = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.12, 0.16),
+        new THREE.MeshBasicMaterial({
+          color: 0xffa038,
+          transparent: true,
+          opacity: 0.15,
+          side: THREE.DoubleSide
+        })
+      );
+      brakeHazard.position.set(0.38, 0, 0);
+      forceArenaGroup.add(brakeHazard);
+
+      // Rescue Supply Cart Sub-Group
+      const cartGroup = new THREE.Group();
+      const cartChassis = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, 0.09, 0.04),
+        new THREE.MeshBasicMaterial({ color: 0x0f2b48 })
+      );
+      cartGroup.add(cartChassis);
+
+      const cartCockpit = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.05, 0.05),
+        new THREE.MeshBasicMaterial({ color: 0x38d9ff })
+      );
+      cartCockpit.position.set(0.03, 0, 0.01);
+      cartGroup.add(cartCockpit);
+
+      const cargoPod1 = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.025, 0.025, 0.06, 16),
+        new THREE.MeshBasicMaterial({ color: 0x31f2a1 })
+      );
+      cargoPod1.position.set(-0.04, 0.02, 0.02);
+      cargoPod1.rotation.z = Math.PI / 2;
+      cartGroup.add(cargoPod1);
+
+      const cargoPod2 = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.025, 0.025, 0.06, 16),
+        new THREE.MeshBasicMaterial({ color: 0xffa038 })
+      );
+      cargoPod2.position.set(-0.04, -0.02, 0.02);
+      cargoPod2.rotation.z = Math.PI / 2;
+      cartGroup.add(cargoPod2);
+
+      const thrusterPlume = new THREE.Mesh(
+        new THREE.ConeGeometry(0.035, 0.12, 16),
+        new THREE.MeshBasicMaterial({
+          color: 0x00e5ff,
+          transparent: true,
+          opacity: 0.85
+        })
+      );
+      thrusterPlume.rotation.z = Math.PI / 2;
+      thrusterPlume.position.set(-0.15, 0, 0);
+      thrusterPlume.visible = false;
+      cartGroup.add(thrusterPlume);
+
+      const brakeFlare = new THREE.Mesh(
+        new THREE.ConeGeometry(0.03, 0.09, 16),
+        new THREE.MeshBasicMaterial({
+          color: 0xff3b30,
+          transparent: true,
+          opacity: 0.85
+        })
+      );
+      brakeFlare.rotation.z = -Math.PI / 2;
+      brakeFlare.position.set(0.14, 0, 0);
+      brakeFlare.visible = false;
+      cartGroup.add(brakeFlare);
+
+      const cartAura = new THREE.Mesh(
+        new THREE.SphereGeometry(0.14, 16, 16),
+        new THREE.MeshBasicMaterial({
+          color: 0x38d9ff,
+          transparent: true,
+          opacity: 0.25,
+          blending: THREE.AdditiveBlending
+        })
+      );
+      cartGroup.add(cartAura);
+      forceArenaGroup.add(cartGroup);
+      scene.add(forceArenaGroup);
+
+      // --- Group 2: IMPULSE RUSH (Master of Impact) ---
+      const impulseChamberGroup = new THREE.Group();
+
+      const chamberFrame = new THREE.LineLoop(
+        new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(-0.85, -0.40, 0),
+          new THREE.Vector3(0.85, -0.40, 0),
+          new THREE.Vector3(0.85, 0.40, 0),
+          new THREE.Vector3(-0.85, 0.40, 0)
+        ]),
+        new THREE.LineBasicMaterial({
+          color: 0xffa038,
+          transparent: true,
+          opacity: 0.45
+        })
+      );
+      impulseChamberGroup.add(chamberFrame);
+
+      const chamberGuide1 = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(-0.85, 0, 0),
+          new THREE.Vector3(0.85, 0, 0)
+        ]),
+        new THREE.LineBasicMaterial({
+          color: 0xffa038,
+          transparent: true,
+          opacity: 0.35
+        })
+      );
+      impulseChamberGroup.add(chamberGuide1);
+
+      const pistonGroup = new THREE.Group();
+      const pistonCylinder = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.045, 0.045, 0.28, 16),
+        new THREE.MeshBasicMaterial({ color: 0x334155 })
+      );
+      pistonCylinder.rotation.z = Math.PI / 2;
+      pistonCylinder.position.set(-0.20, 0, 0);
+      pistonGroup.add(pistonCylinder);
+
+      const pistonShaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.02, 0.02, 0.22, 16),
+        new THREE.MeshBasicMaterial({ color: 0x94a3b8 })
+      );
+      pistonShaft.rotation.z = Math.PI / 2;
+      pistonGroup.add(pistonShaft);
+
+      const hammerHead = new THREE.Mesh(
+        new THREE.BoxGeometry(0.03, 0.12, 0.05),
+        new THREE.MeshBasicMaterial({ color: 0xffa038 })
+      );
+      hammerHead.position.set(0.12, 0, 0);
+      pistonGroup.add(hammerHead);
+      pistonGroup.position.set(-0.65, 0, 0);
+      impulseChamberGroup.add(pistonGroup);
+
+      const probeGroup = new THREE.Group();
+      const probeSphere = createGlowSphere(0.075, 0xffa038);
+      probeGroup.add(probeSphere.group);
+
+      const crumpleShield = new THREE.Mesh(
+        new THREE.RingGeometry(0.08, 0.095, 24, 1, Math.PI / 2, Math.PI),
+        new THREE.MeshBasicMaterial({
+          color: 0x38d9ff,
+          transparent: true,
+          opacity: 0.8,
+          side: THREE.DoubleSide
+        })
+      );
+      crumpleShield.rotation.z = Math.PI / 2;
+      probeGroup.add(crumpleShield);
+      probeGroup.position.set(-0.20, 0, 0);
+      impulseChamberGroup.add(probeGroup);
+
+      const impactContactBar = new THREE.Mesh(
+        new THREE.BoxGeometry(0.015, 0.18, 0.02),
+        new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0
+        })
+      );
+      impactContactBar.position.set(-0.12, 0, 0.02);
+      impulseChamberGroup.add(impactContactBar);
+
+      const impulseShockwaveRing = new THREE.Mesh(
+        new THREE.RingGeometry(0.04, 0.08, 32),
+        new THREE.MeshBasicMaterial({
+          color: 0xffa038,
+          transparent: true,
+          opacity: 0,
+          side: THREE.DoubleSide
+        })
+      );
+      impulseChamberGroup.add(impulseShockwaveRing);
+      scene.add(impulseChamberGroup);
 
       // --- Group 3: Hooke's Law Spring & Bob ---
       const hookeGroup = new THREE.Group();
@@ -1042,13 +1414,84 @@ export default function App() {
       hookeGroup.add(hookeBob.group);
       scene.add(hookeGroup);
 
-      // --- Group 4: Collision Two Balls ---
-      const collisionGroup = new THREE.Group();
-      const collBall1 = createGlowSphere(0.075, 0x38d9ff); // Cyan Ball 1
-      const collBall2 = createGlowSphere(0.075, 0xe040fb); // Magenta Ball 2
-      collisionGroup.add(collBall1.group);
-      collisionGroup.add(collBall2.group);
-      scene.add(collisionGroup);
+      // --- Group 4: COLLISION CHAOS (The Collision Strategist) ---
+      const collisionArenaGroup = new THREE.Group();
+
+      const collRailGeom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-0.95, 0, 0),
+        new THREE.Vector3(0.95, 0, 0)
+      ]);
+      const collRail = new THREE.Line(
+        collRailGeom,
+        new THREE.LineBasicMaterial({
+          color: 0x38d9ff,
+          transparent: true,
+          opacity: 0.4
+        })
+      );
+      collisionArenaGroup.add(collRail);
+
+      const nexusRing = new THREE.Mesh(
+        new THREE.RingGeometry(0.06, 0.09, 32),
+        new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.35,
+          side: THREE.DoubleSide
+        })
+      );
+      nexusRing.position.set(0, 0, -0.01);
+      collisionArenaGroup.add(nexusRing);
+
+      const targetDockBay = new THREE.Mesh(
+        new THREE.RingGeometry(0.08, 0.13, 32),
+        new THREE.MeshBasicMaterial({
+          color: 0xe040fb,
+          transparent: true,
+          opacity: 0.3,
+          side: THREE.DoubleSide
+        })
+      );
+      targetDockBay.position.set(0.72, 0, -0.01);
+      collisionArenaGroup.add(targetDockBay);
+
+      const pod1Group = new THREE.Group();
+      const pod1Core = createGlowSphere(0.07, 0x38d9ff);
+      pod1Group.add(pod1Core.group);
+      const pod1Nose = new THREE.Mesh(
+        new THREE.ConeGeometry(0.035, 0.09, 16),
+        new THREE.MeshBasicMaterial({ color: 0x00e5ff })
+      );
+      pod1Nose.rotation.z = -Math.PI / 2;
+      pod1Nose.position.set(0.07, 0, 0);
+      pod1Group.add(pod1Nose);
+      collisionArenaGroup.add(pod1Group);
+
+      const drone2Group = new THREE.Group();
+      const drone2Core = createGlowSphere(0.07, 0xe040fb);
+      drone2Group.add(drone2Core.group);
+      const drone2Ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.08, 0.10, 6),
+        new THREE.MeshBasicMaterial({
+          color: 0xe040fb,
+          transparent: true,
+          opacity: 0.75,
+          side: THREE.DoubleSide
+        })
+      );
+      drone2Group.add(drone2Ring);
+      collisionArenaGroup.add(drone2Group);
+
+      const magneticLatch = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, 0.04, 0.02),
+        new THREE.MeshBasicMaterial({
+          color: 0x31f2a1,
+          transparent: true,
+          opacity: 0
+        })
+      );
+      collisionArenaGroup.add(magneticLatch);
+      scene.add(collisionArenaGroup);
 
       // --- Group 5: Projectile Cannon, Ground, Target & Projectile ---
       const projectileGroup = new THREE.Group();
@@ -1607,10 +2050,10 @@ export default function App() {
         const currentExp = activeExpIdRef.current;
 
         // Update Visibility of 3D groups according to active experiment
-        newtonMesh.group.visible = currentExp === "newton";
-        impulseMesh.group.visible = currentExp === "impulse";
+        forceArenaGroup.visible = currentExp === "newton";
+        impulseChamberGroup.visible = currentExp === "impulse";
         hookeGroup.visible = currentExp === "hooke";
-        collisionGroup.visible = currentExp === "collision";
+        collisionArenaGroup.visible = currentExp === "collision";
         projectileGroup.visible = currentExp === "projectile";
         pendulumGroup.visible = currentExp === "pendulum";
         electricGroup.visible = currentExp === "electric";
@@ -1703,116 +2146,127 @@ export default function App() {
         // EXPERIMENT 1: NEWTON'S 2ND LAW (F_net = m · a)
         // -----------------------------------------------------
         if (currentExp === "newton") {
-          const ball = simState.newton;
+          const cart = simState.newton;
           let appliedFx = 0;
-          let appliedFy = 0;
 
           // Manual force slider contribution
           if (currentAppliedForce > 0 && !effectiveFrozen) {
             appliedFx += currentAppliedForce;
           }
 
-          // Proximity repulsive force
+          // Cart Thruster forward force
+          if (cart.isThrusting && !effectiveFrozen) {
+            appliedFx += cart.thrustForce || 18.0;
+          }
+
+          // Cart Retro-Braking opposing force
+          if (cart.isBraking && !effectiveFrozen) {
+            appliedFx -= cart.brakeForce || 24.0;
+          }
+
+          // Hand proximity repulsive force
           if (primaryHand && !effectiveFrozen) {
-            const dx = ball.x - primaryHand.x;
-            const dy = ball.y - primaryHand.y;
+            const dx = cart.x - primaryHand.x;
+            const dy = cart.y - primaryHand.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
 
-            if (dist < ball.interactionRadius && dist > 0.005) {
+            if (dist < cart.interactionRadius && dist > 0.005) {
               const dirX = dx / dist;
-              const dirY = dy / dist;
-              const proximity = 1 - dist / ball.interactionRadius;
-              const basePush = proximity * 3.8;
+              const proximity = 1 - dist / cart.interactionRadius;
+              const basePush = proximity * 4.2;
               const speedPush = maxHandSpeed * 50.0;
               const impulseBoost = isFastImpulse ? maxHandSpeed * 75.0 : 0;
               const totalF = basePush + speedPush + impulseBoost;
 
               appliedFx += dirX * totalF;
-              appliedFy += dirY * totalF;
             }
           }
 
           if (!effectiveFrozen) {
-            const dragCoeff = 0.75;
-            const netFx = appliedFx - dragCoeff * ball.vx;
-            const netFy = appliedFy - dragCoeff * ball.vy;
+            // Track rail resistance / aerodynamic drag
+            const dragCoeff = 0.55;
+            const netFx = appliedFx - dragCoeff * cart.vx;
 
-            ball.ax = netFx / ball.mass;
-            ball.ay = netFy / ball.mass;
+            // Newton's Second Law: a = F_net / m
+            cart.ax = netFx / cart.mass;
+            cart.ay = 0;
 
-            ball.vx += ball.ax * dt;
-            ball.vy += ball.ay * dt;
+            cart.vx += cart.ax * dt;
+            cart.vy = 0;
 
-            ball.x += ball.vx * dt;
-            ball.y += ball.vy * dt;
+            cart.x += cart.vx * dt;
+            cart.y = 0;
 
-            const limitX = aspect - ball.radius;
-            const limitY = 1.0 - ball.radius;
-
-            if (ball.x > limitX) {
-              ball.x = limitX;
-              ball.vx *= -0.82;
+            // Track boundaries (-0.88 to +0.88)
+            if (cart.x > 0.88) {
+              cart.x = 0.88;
+              cart.vx *= -0.35;
               isWallHit = true;
-            } else if (ball.x < -limitX) {
-              ball.x = -limitX;
-              ball.vx *= -0.82;
+            } else if (cart.x < -0.88) {
+              cart.x = -0.88;
+              cart.vx *= -0.35;
               isWallHit = true;
             }
-            if (ball.y > limitY) {
-              ball.y = limitY;
-              ball.vy *= -0.82;
-              isWallHit = true;
-            } else if (ball.y < -limitY) {
-              ball.y = -limitY;
-              ball.vy *= -0.82;
-              isWallHit = true;
+
+            // Stop cart when braking brings velocity near zero
+            if (cart.isBraking && Math.abs(cart.vx) < 0.05) {
+              cart.vx = 0;
+              cart.ax = 0;
+              cart.isBraking = false;
             }
           }
 
-          currentForceMag = Math.sqrt(appliedFx * appliedFx + appliedFy * appliedFy);
-          currentAccelMag = Math.sqrt(ball.ax * ball.ax + ball.ay * ball.ay);
-          currentSpeedMag = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+          // Check if cart is parked safely inside Rescue Dock Zone [0.46, 0.70] with low velocity
+          cart.inRescueZone = cart.x >= 0.46 && cart.x <= 0.70 && Math.abs(cart.vx) < 0.25;
 
-          newtonMesh.group.position.set(ball.x, ball.y, 0);
+          currentForceMag = Math.abs(appliedFx);
+          currentAccelMag = Math.abs(cart.ax);
+          currentSpeedMag = Math.abs(cart.vx);
+
+          // Animate Rescue Cart 3D Meshes
+          cartGroup.position.set(cart.x, 0, 0);
+
+          // Flare thruster plumes
+          thrusterPlume.visible = cart.isThrusting || (appliedFx > 0.5 && !cart.isBraking);
+          if (thrusterPlume.visible) {
+            const scaleP = 0.8 + 0.4 * Math.sin(totalSimTime * 25);
+            thrusterPlume.scale.set(scaleP, scaleP, 1);
+          }
+
+          brakeFlare.visible = cart.isBraking || appliedFx < -0.5;
+          if (brakeFlare.visible) {
+            const scaleB = 0.8 + 0.4 * Math.cos(totalSimTime * 30);
+            brakeFlare.scale.set(scaleB, scaleB, 1);
+          }
+
+          // Scale cargo pods based on mass
+          const podScale = Math.max(0.6, Math.min(1.8, cart.mass));
+          cargoPod1.scale.set(podScale, podScale, podScale);
+          cargoPod2.scale.set(podScale, podScale, podScale);
+
+          // Pulse beacon
+          dockBeacon.scale.setScalar(1 + 0.15 * Math.sin(totalSimTime * 5));
 
           if (currentShowVectors) {
-            const pos = new THREE.Vector3(ball.x, ball.y, 0);
+            const pos = new THREE.Vector3(cart.x, 0, 0);
             if (currentForceMag > 0.15) {
               forceArrow.position.copy(pos);
-              forceArrow.setDirection(
-                new THREE.Vector3(appliedFx, appliedFy, 0).normalize()
-              );
-              forceArrow.setLength(
-                Math.min(0.6, currentForceMag * 0.14),
-                0.06,
-                0.04
-              );
+              forceArrow.setDirection(new THREE.Vector3(appliedFx > 0 ? 1 : -1, 0, 0));
+              forceArrow.setLength(Math.min(0.6, currentForceMag * 0.035), 0.06, 0.04);
               forceArrow.visible = true;
             } else forceArrow.visible = false;
 
-            if (currentSpeedMag > 0.08) {
+            if (currentSpeedMag > 0.05) {
               velocityArrow.position.copy(pos);
-              velocityArrow.setDirection(
-                new THREE.Vector3(ball.vx, ball.vy, 0).normalize()
-              );
-              velocityArrow.setLength(
-                Math.min(0.55, currentSpeedMag * 0.22),
-                0.06,
-                0.04
-              );
+              velocityArrow.setDirection(new THREE.Vector3(cart.vx > 0 ? 1 : -1, 0, 0));
+              velocityArrow.setLength(Math.min(0.55, currentSpeedMag * 0.18), 0.06, 0.04);
               velocityArrow.visible = true;
             } else velocityArrow.visible = false;
 
-            if (currentAccelMag > 0.2) {
+            if (currentAccelMag > 0.15) {
               accelArrow.position.copy(pos);
-              accelArrow.setDirection(
-                new THREE.Vector3(ball.ax, ball.ay, 0).normalize()
-              );
-              accelArrow.setLength(
-                Math.min(0.5, currentAccelMag * 0.12),
-                0.05,
-                0.035
-              );
+              accelArrow.setDirection(new THREE.Vector3(cart.ax > 0 ? 1 : -1, 0, 0));
+              accelArrow.setLength(Math.min(0.5, currentAccelMag * 0.08), 0.05, 0.035);
               accelArrow.visible = true;
             } else accelArrow.visible = false;
           } else {
@@ -1826,72 +2280,118 @@ export default function App() {
         // EXPERIMENT 2: IMPULSE & MOMENTUM (J = F · Δt = Δp)
         // -----------------------------------------------------
         else if (currentExp === "impulse") {
-          const ball = simState.impulse;
+          const probe = simState.impulse;
           let contactFx = 0;
-          let contactFy = 0;
 
-          if (primaryHand && !effectiveFrozen) {
-            const dx = ball.x - primaryHand.x;
-            const dy = ball.y - primaryHand.y;
+          // Piston automated firing sequence
+          if (probe.pistonActive && !effectiveFrozen) {
+            probe.pistonTimer += dt;
+            const targetStrikeX = probe.x - 0.12;
+            const contactDuration = probe.contactDuration || 0.08;
+
+            if (probe.pistonTimer < 0.10) {
+              // Piston ram advancing rapidly forward toward probe
+              const progress = probe.pistonTimer / 0.10;
+              probe.pistonX = -0.65 + progress * (targetStrikeX - (-0.65));
+            } else if (probe.pistonTimer < 0.10 + contactDuration) {
+              // Impact Contact Window: Force is exerted for duration Δt
+              probe.isContact = true;
+              probe.pistonX = targetStrikeX;
+              const f = (probe.strikeForce || 25.0) * (probe.strikeDir || 1);
+              contactFx = f;
+              probe.peakForce = Math.max(probe.peakForce, Math.abs(f));
+              probe.contactTime += dt;
+              probe.impulseJ += Math.abs(f) * dt;
+
+              // Acceleration during contact: a = F / m
+              probe.vx += (contactFx / probe.mass) * dt;
+
+              // Compress crumple shield & flash impact contact bar
+              crumpleShield.scale.set(0.65, 1.0, 1.0);
+              impactContactBar.material.opacity = 0.95;
+
+              // Shockwave ring trigger
+              probe.shockwaveOpacity = 1.0;
+              impulseShockwaveRing.position.set(probe.x - 0.08, 0, 0);
+            } else if (probe.pistonTimer < 0.32 + contactDuration) {
+              // Piston retracting back to base
+              probe.isContact = false;
+              crumpleShield.scale.set(1.0, 1.0, 1.0);
+              impactContactBar.material.opacity = 0;
+              const retractProgress =
+                (probe.pistonTimer - 0.10 - contactDuration) / 0.22;
+              probe.pistonX = targetStrikeX - retractProgress * (targetStrikeX - (-0.65));
+            } else {
+              // Sequence complete
+              probe.pistonActive = false;
+              probe.pistonX = -0.65;
+              probe.isContact = false;
+              crumpleShield.scale.set(1.0, 1.0, 1.0);
+              impactContactBar.material.opacity = 0;
+            }
+          }
+
+          // Hand strike fallback / interactive swipe
+          if (primaryHand && !effectiveFrozen && !probe.pistonActive) {
+            const dx = probe.x - primaryHand.x;
+            const dy = probe.y - primaryHand.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
 
             if (dist < 0.38 && dist > 0.005) {
-              ball.isContact = true;
-              ball.contactTime += dt;
+              probe.isContact = true;
+              probe.contactTime += dt;
 
               const dirX = dx / dist;
-              const dirY = dy / dist;
               const proximity = 1 - dist / 0.38;
               const instForce = proximity * 18.0 + maxHandSpeed * 100.0;
 
               contactFx = dirX * instForce;
-              contactFy = dirY * instForce;
+              probe.peakForce = Math.max(probe.peakForce, instForce);
+              probe.impulseJ += instForce * dt;
 
-              ball.peakForce = Math.max(ball.peakForce, instForce);
-              ball.impulseJ += instForce * dt;
+              probe.vx += (contactFx / probe.mass) * dt;
 
-              ball.vx += (contactFx / ball.mass) * dt;
-              ball.vy += (contactFy / ball.mass) * dt;
-
-              shockwaveMesh.position.set(ball.x, ball.y, 0);
-              shockwaveMesh.visible = true;
-              shockwaveOpacity = 0.8;
+              probe.shockwaveOpacity = 0.8;
+              impulseShockwaveRing.position.set(probe.x, 0, 0);
             } else {
-              ball.isContact = false;
+              probe.isContact = false;
             }
           }
 
+          // Probe glide motion inside containment chamber
           if (!effectiveFrozen) {
-            ball.vx *= 0.96;
-            ball.vy *= 0.96;
-            ball.x += ball.vx * dt;
-            ball.y += ball.vy * dt;
+            probe.vx *= 0.985; // Low rail friction
+            probe.x += probe.vx * dt;
 
-            const limitX = aspect - ball.radius;
-            const limitY = 1.0 - ball.radius;
-            if (ball.x > limitX) {
-              ball.x = limitX;
-              ball.vx *= -0.7;
-            } else if (ball.x < -limitX) {
-              ball.x = -limitX;
-              ball.vx *= -0.7;
-            }
-            if (ball.y > limitY) {
-              ball.y = limitY;
-              ball.vy *= -0.7;
-            } else if (ball.y < -limitY) {
-              ball.y = -limitY;
-              ball.vy *= -0.7;
+            // Boundary containment rebounds
+            if (probe.x > 0.75) {
+              probe.x = 0.75;
+              probe.vx *= -0.65;
+            } else if (probe.x < -0.45 && !probe.pistonActive) {
+              probe.x = -0.45;
+              probe.vx *= -0.65;
             }
           }
 
-          currentForceMag = Math.sqrt(
-            contactFx * contactFx + contactFy * contactFy
-          );
-          currentSpeedMag = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
-          ball.deltaP = ball.mass * currentSpeedMag;
+          // Animate Shockwave Rings
+          if (probe.shockwaveOpacity > 0.02) {
+            impulseShockwaveRing.scale.addScalar(0.04);
+            impulseShockwaveRing.material.opacity = probe.shockwaveOpacity;
+            probe.shockwaveOpacity *= 0.91;
+            impulseShockwaveRing.visible = true;
+          } else {
+            impulseShockwaveRing.visible = false;
+            impulseShockwaveRing.scale.set(1, 1, 1);
+          }
 
-          impulseMesh.group.position.set(ball.x, ball.y, 0);
+          currentForceMag = Math.abs(contactFx);
+          currentSpeedMag = Math.abs(probe.vx);
+          probe.deltaP = probe.mass * currentSpeedMag;
+
+          // Update Three.js meshes
+          pistonGroup.position.set(probe.pistonX, 0, 0);
+          probeGroup.position.set(probe.x, 0, 0);
+
           forceArrow.visible = false;
           accelArrow.visible = false;
           velocityArrow.visible = false;
@@ -1967,101 +2467,139 @@ export default function App() {
         else if (currentExp === "collision") {
           const { b1, b2 } = simState.collision;
 
-          // Hand/Mouse pushes Ball 1
-          if (primaryHand && !effectiveFrozen) {
-            const dx = b1.x - primaryHand.x;
-            const dy = b1.y - primaryHand.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < 0.45 && dist > 0.005) {
-              const pushF = (1 - dist / 0.45) * 4.5 + maxHandSpeed * 50.0;
-              b1.vx += (dx / dist) * (pushF / b1.mass) * dt;
-              b1.vy += (dy / dist) * (pushF / b1.mass) * dt;
+          // Replay Mode Playback
+          if (simState.collision.isReplaying && simState.collision.replayBuffer.length > 0) {
+            const frame =
+              simState.collision.replayBuffer[simState.collision.replayIndex];
+            if (frame) {
+              b1.x = frame.x1;
+              b1.vx = frame.vx1;
+              b2.x = frame.x2;
+              b2.vx = frame.vx2;
+              simState.collision.replayIndex =
+                (simState.collision.replayIndex + 1) %
+                simState.collision.replayBuffer.length;
             }
-          }
+          } else if (!effectiveFrozen) {
+            // Hand/Mouse pushes Pod 1 along rails
+            if (primaryHand) {
+              const dx = b1.x - primaryHand.x;
+              const dist = Math.abs(dx);
+              if (dist < 0.45 && dist > 0.005) {
+                const pushF = (1 - dist / 0.45) * 5.0 + maxHandSpeed * 50.0;
+                const dir = dx > 0 ? 1 : -1;
+                b1.vx += dir * (pushF / b1.mass) * dt;
+              }
+            }
 
-          if (!effectiveFrozen) {
-            b1.vx *= 0.992;
-            b1.vy *= 0.992;
-            b2.vx *= 0.992;
-            b2.vy *= 0.992;
+            // Buffer recording for slow-motion replay (up to 240 frames)
+            if (simState.collision.replayBuffer.length < 240) {
+              simState.collision.replayBuffer.push({
+                x1: b1.x,
+                vx1: b1.vx,
+                x2: b2.x,
+                vx2: b2.vx
+              });
+            }
+
+            b1.vx *= 0.996;
+            b2.vx *= 0.996;
 
             b1.x += b1.vx * dt;
-            b1.y += b1.vy * dt;
             b2.x += b2.vx * dt;
-            b2.y += b2.vy * dt;
 
-            // Collision Check between b1 and b2
-            const cdx = b2.x - b1.x;
-            const cdy = b2.y - b1.y;
-            const cDist = Math.sqrt(cdx * cdx + cdy * cdy);
+            // 1D Collision Detection along rails
+            const dx = b2.x - b1.x;
             const minDist = b1.radius + b2.radius;
 
-            if (cDist < minDist && cDist > 0.0001) {
-              const nx = cdx / cDist;
-              const ny = cdy / cDist;
+            if (dx < minDist && dx > -0.05 && b1.vx > b2.vx) {
+              const v1_before = b1.vx;
+              const v2_before = b2.vx;
+              const m1 = b1.mass;
+              const m2 = b2.mass;
 
-              const kx = b1.vx - b2.vx;
-              const ky = b1.vy - b2.vy;
+              let v1_after;
+              let v2_after;
 
-              if (nx * kx + ny * ky > 0) {
-                // Moving toward each other
-                if (currentCollisionType === "inelastic") {
-                  // Perfectly Inelastic Collision: Stick together
-                  const totalM = b1.mass + b2.mass;
-                  const vCommonX = (b1.mass * b1.vx + b2.mass * b2.vx) / totalM;
-                  const vCommonY = (b1.mass * b1.vy + b2.mass * b2.vy) / totalM;
-                  b1.vx = vCommonX;
-                  b1.vy = vCommonY;
-                  b2.vx = vCommonX;
-                  b2.vy = vCommonY;
-                } else {
-                  // Elastic Collision: Momentum & Kinetic Energy Conserved
-                  const p = (2 * (nx * kx + ny * ky)) / (b1.mass + b2.mass);
-                  b1.vx -= p * b2.mass * nx;
-                  b1.vy -= p * b2.mass * ny;
-                  b2.vx += p * b1.mass * nx;
-                  b2.vy += p * b1.mass * ny;
-                }
-
-                // Push apart slightly to prevent clipping
-                const overlap = (minDist - cDist) * 0.55;
-                b1.x -= nx * overlap;
-                b1.y -= ny * overlap;
-                b2.x += nx * overlap;
-                b2.y += ny * overlap;
-
-                // Collision burst
-                shockwaveMesh.position.set((b1.x + b2.x) / 2, (b1.y + b2.y) / 2, 0);
-                shockwaveMesh.visible = true;
-                shockwaveOpacity = 0.9;
+              if (currentCollisionType === "inelastic") {
+                // Perfectly Inelastic (e = 0.0): latch together at shared velocity
+                const v_shared = (m1 * v1_before + m2 * v2_before) / (m1 + m2);
+                v1_after = v_shared;
+                v2_after = v_shared;
+              } else {
+                // Perfectly Elastic (e = 1.0): momentum and kinetic energy conserved
+                v1_after =
+                  ((m1 - m2) / (m1 + m2)) * v1_before +
+                  ((2 * m2) / (m1 + m2)) * v2_before;
+                v2_after =
+                  ((2 * m1) / (m1 + m2)) * v1_before +
+                  ((m2 - m1) / (m1 + m2)) * v2_before;
               }
+
+              b1.vx = v1_after;
+              b2.vx = v2_after;
+              b1.x = b2.x - minDist; // Prevent mesh interpenetration
+
+              simState.collision.collisionOccurred = true;
+
+              // Forensic matrix generation with exact physics values
+              simState.collision.forensicData = {
+                p1_before: m1 * v1_before,
+                p2_before: m2 * v2_before,
+                p_total_before: m1 * v1_before + m2 * v2_before,
+                ke1_before: 0.5 * m1 * v1_before ** 2,
+                ke2_before: 0.5 * m2 * v2_before ** 2,
+                ke_total_before: 0.5 * m1 * v1_before ** 2 + 0.5 * m2 * v2_before ** 2,
+                p1_after: m1 * v1_after,
+                p2_after: m2 * v2_after,
+                p_total_after: m1 * v1_after + m2 * v2_after,
+                ke1_after: 0.5 * m1 * v1_after ** 2,
+                ke2_after: 0.5 * m2 * v2_after ** 2,
+                ke_total_after: 0.5 * m1 * v1_after ** 2 + 0.5 * m2 * v2_after ** 2,
+                restitution: currentCollisionType === "inelastic" ? 0.0 : 1.0,
+                type: currentCollisionType
+              };
+
+              // Burst effects at contact point
+              shockwaveMesh.position.set((b1.x + b2.x) / 2, 0, 0);
+              shockwaveMesh.visible = true;
+              shockwaveOpacity = 0.95;
             }
 
             // Boundary rebounds
-            const limitX = aspect - 0.08;
-            const limitY = 0.92;
-            [b1, b2].forEach((b) => {
-              if (b.x > limitX) {
-                b.x = limitX;
-                b.vx *= -0.85;
-              } else if (b.x < -limitX) {
-                b.x = -limitX;
-                b.vx *= -0.85;
-              }
-              if (b.y > limitY) {
-                b.y = limitY;
-                b.vy *= -0.85;
-              } else if (b.y < -limitY) {
-                b.y = -limitY;
-                b.vy *= -0.85;
-              }
-            });
+            if (b1.x < -0.85) {
+              b1.x = -0.85;
+              b1.vx *= -0.7;
+            }
+            if (b2.x > 0.85) {
+              b2.x = 0.85;
+              b2.vx *= -0.7;
+            }
+
+            // Target Dock Bay reached condition (x >= 0.65 m)
+            if (b2.x >= 0.65) {
+              simState.collision.targetReached = true;
+            }
           }
 
-          collBall1.group.position.set(b1.x, b1.y, 0);
-          collBall2.group.position.set(b2.x, b2.y, 0);
+          // Animate craft groups
+          pod1Group.position.set(b1.x, 0, 0);
+          drone2Group.position.set(b2.x, 0, 0);
+          drone2Ring.rotation.z += 0.02;
 
-          currentSpeedMag = Math.sqrt(b1.vx * b1.vx + b1.vy * b1.vy);
+          // Inelastic magnetic latch
+          if (
+            currentCollisionType === "inelastic" &&
+            simState.collision.collisionOccurred &&
+            Math.abs(b1.x - b2.x) < 0.22
+          ) {
+            magneticLatch.position.set((b1.x + b2.x) / 2, 0, 0.01);
+            magneticLatch.material.opacity = 0.85;
+          } else {
+            magneticLatch.material.opacity = 0;
+          }
+
+          currentSpeedMag = Math.abs(b1.vx);
           forceArrow.visible = false;
           accelArrow.visible = false;
           velocityArrow.visible = false;
@@ -2466,21 +3004,21 @@ export default function App() {
           lastThrottleUpdate = now;
 
           if (currentExp === "newton") {
-            const ball = simState.newton;
-            const p = ball.mass * currentSpeedMag;
-            const ke = 0.5 * ball.mass * currentSpeedMag * currentSpeedMag;
+            const cart = simState.newton;
+            const p = cart.mass * currentSpeedMag;
+            const ke = 0.5 * cart.mass * currentSpeedMag * currentSpeedMag;
 
             telemetryRef.current = {
               experimentName: "Newton's 2nd Law",
-              mass: ball.mass,
+              mass: cart.mass,
               force: Number(currentForceMag.toFixed(2)),
               acceleration: Number(currentAccelMag.toFixed(2)),
               velocity: Number(currentSpeedMag.toFixed(2)),
-              vx: Number(ball.vx.toFixed(2)),
-              vy: Number(ball.vy.toFixed(2)),
-              posX: Number(ball.x.toFixed(2)),
-              posY: Number(ball.y.toFixed(2)),
-              displacement: 0,
+              vx: Number(cart.vx.toFixed(2)),
+              vy: 0,
+              posX: Number(cart.x.toFixed(2)),
+              posY: 0,
+              displacement: Number((cart.x - (-0.65)).toFixed(2)),
               momentum: Number(p.toFixed(2)),
               kineticEnergy: Number(ke.toFixed(2)),
               handSpeed: Number(maxHandSpeed.toFixed(3)),
@@ -2492,51 +3030,61 @@ export default function App() {
               force: currentForceMag,
               acceleration: currentAccelMag,
               velocity: currentSpeedMag,
-              vx: ball.vx,
-              vy: ball.vy,
-              posX: ball.x,
-              posY: ball.y,
+              vx: cart.vx,
+              vy: 0,
+              posX: cart.x,
+              posY: 0,
               momentum: p,
               kineticEnergy: ke,
-              mass: ball.mass,
-              interactionRadius: ball.interactionRadius
+              mass: cart.mass,
+              interactionRadius: cart.interactionRadius,
+              inRescueZone: cart.inRescueZone,
+              dockTargetX: cart.dockTargetX,
+              isThrusting: cart.isThrusting,
+              isBraking: cart.isBraking
             });
 
             if (effectiveFrozen) {
-              setExplanation("Fist detected ✊: Physics calculations frozen.");
+              setExplanation("Fist detected ✊: Rescue Arena physics calculations frozen.");
               setFormulaTag("v = 0, a = 0 (Frozen)");
+            } else if (cart.inRescueZone) {
+              setExplanation("🎯 Mission Success! Supply cart safely docked in Target Zone [0.46 - 0.70 m].");
+              setFormulaTag("Target Zone Cleared (F_net = 0)");
+            } else if (cart.isBraking) {
+              setExplanation(`🛑 Retro-braking active: opposing force decelerating payload cart.`);
+              setFormulaTag("a = -F_brake / m");
             } else if (currentForceMag > 0.15) {
               setExplanation(
-                `Net force ${currentForceMag.toFixed(1)} N applied. Acceleration a = F/m = ${(currentForceMag / ball.mass).toFixed(1)} m/s².`
+                `Net force ${currentForceMag.toFixed(1)} N applied. Acceleration a = F/m = ${(currentForceMag / cart.mass).toFixed(2)} m/s².`
               );
               setFormulaTag("F = m · a");
             } else if (currentSpeedMag > 0.05) {
               setExplanation(
-                `Object moving at ${currentSpeedMag.toFixed(1)} m/s. Drag gradually slows it down.`
-              );
-              setFormulaTag("F_drag = -b · v");
-            } else {
-              setExplanation(
-                "Object is at rest in equilibrium. Move hand or adjust applied force to accelerate."
+                `Cart coasting at ${currentSpeedMag.toFixed(2)} m/s. Inertia maintains momentum p = m·v.`
               );
               setFormulaTag("Newton's 1st Law (Inertia)");
+            } else {
+              setExplanation(
+                "Rescue cart at rest at track origin. Engage Ion Thrusters [D / →] or adjust applied force to launch!"
+              );
+              setFormulaTag("F_net = m · a = 0");
             }
           } else if (currentExp === "impulse") {
-            const ball = simState.impulse;
+            const probe = simState.impulse;
             telemetryRef.current = {
               experimentName: "Impulse & Momentum Lab",
-              mass: ball.mass,
+              mass: probe.mass,
               force: Number(currentForceMag.toFixed(2)),
-              acceleration: Number((currentForceMag / ball.mass).toFixed(2)),
+              acceleration: Number((currentForceMag / probe.mass).toFixed(2)),
               velocity: Number(currentSpeedMag.toFixed(2)),
-              vx: Number(ball.vx.toFixed(2)),
-              vy: Number(ball.vy.toFixed(2)),
-              posX: Number(ball.x.toFixed(2)),
-              posY: Number(ball.y.toFixed(2)),
+              vx: Number(probe.vx.toFixed(2)),
+              vy: 0,
+              posX: Number(probe.x.toFixed(2)),
+              posY: 0,
               displacement: 0,
-              momentum: Number((ball.mass * currentSpeedMag).toFixed(2)),
+              momentum: Number((probe.mass * currentSpeedMag).toFixed(2)),
               kineticEnergy: Number(
-                (0.5 * ball.mass * currentSpeedMag * currentSpeedMag).toFixed(2)
+                (0.5 * probe.mass * currentSpeedMag * currentSpeedMag).toFixed(2)
               ),
               handSpeed: Number(maxHandSpeed.toFixed(3)),
               time: Number(totalSimTime.toFixed(1)),
@@ -2546,26 +3094,27 @@ export default function App() {
             setPhysicsState({
               force: currentForceMag,
               velocity: currentSpeedMag,
-              peakForce: ball.peakForce,
-              contactTime: ball.contactTime,
-              impulseJ: ball.impulseJ,
-              deltaMomentum: ball.deltaP,
-              mass: ball.mass
+              peakForce: probe.peakForce,
+              contactTime: probe.contactTime,
+              impulseJ: probe.impulseJ,
+              deltaMomentum: probe.deltaP,
+              mass: probe.mass,
+              pistonActive: probe.pistonActive
             });
 
-            if (ball.isContact) {
+            if (probe.isContact) {
               setExplanation(
-                `💥 Impact strike! Contact force: ${currentForceMag.toFixed(1)} N, accumulating impulse J.`
+                `💥 Piston Strike! Contact force: ${probe.peakForce.toFixed(1)} N, accumulating impulse J.`
               );
               setFormulaTag("J = ∫ F dt");
-            } else if (ball.impulseJ > 0) {
+            } else if (probe.impulseJ > 0) {
               setExplanation(
-                `Impulse delivered: J = ${ball.impulseJ.toFixed(2)} N·s produced momentum change Δp = ${ball.deltaP.toFixed(2)} kg·m/s.`
+                `Impulse delivered: J = ${probe.impulseJ.toFixed(2)} N·s produced momentum change Δp = ${probe.deltaP.toFixed(2)} kg·m/s.`
               );
               setFormulaTag("J = Δp = m·v_f");
             } else {
               setExplanation(
-                "Target ball at rest. Perform a quick hand swipe 💨 to strike with high impulse!"
+                "Impact chamber armed. Choose force and contact duration, then fire hydraulic piston [Space]!"
               );
               setFormulaTag("J = F_avg · Δt = Δp");
             }
@@ -2613,12 +3162,12 @@ export default function App() {
             }
           } else if (currentExp === "collision") {
             const { b1, b2 } = simState.collision;
-            const v1 = Math.sqrt(b1.vx * b1.vx + b1.vy * b1.vy);
-            const v2 = Math.sqrt(b2.vx * b2.vx + b2.vy * b2.vy);
-            const p1 = b1.mass * v1;
-            const p2 = b2.mass * v2;
-            const pTot = Math.abs(b1.mass * b1.vx + b2.mass * b2.vx);
-            const keTot = 0.5 * b1.mass * v1 * v1 + 0.5 * b2.mass * v2 * v2;
+            const v1 = Math.abs(b1.vx);
+            const v2 = Math.abs(b2.vx);
+            const p1 = b1.mass * b1.vx;
+            const p2 = b2.mass * b2.vx;
+            const pTot = b1.mass * b1.vx + b2.mass * b2.vx;
+            const keTot = 0.5 * b1.mass * b1.vx * b1.vx + 0.5 * b2.mass * b2.vx * b2.vx;
 
             telemetryRef.current = {
               experimentName: "Collisions & Momentum",
@@ -2631,31 +3180,42 @@ export default function App() {
             };
 
             setPhysicsState({
-              v1,
-              v2,
+              v1: b1.vx,
+              v2: b2.vx,
               p1,
               p2,
               pTotal: pTot,
               keTotal: keTot,
               mass: b1.mass,
-              mass2: b2.mass
+              mass2: b2.mass,
+              forensicData: simState.collision.forensicData,
+              targetReached: simState.collision.targetReached,
+              collisionOccurred: simState.collision.collisionOccurred,
+              isReplaying: simState.collision.isReplaying
             });
 
-            if (v1 > 0.1 && v2 < 0.05) {
+            if (simState.collision.isReplaying) {
+              setExplanation("⏪ Replaying Collision Nexus in slow motion. Inspect momentum transfer!");
+              setFormulaTag("Slow-Motion Replay (p_tot = const)");
+            } else if (simState.collision.targetReached) {
+              setExplanation("🎯 Target Dock Reached! Drone 2 successfully propelled into target bay!");
+              setFormulaTag("Tactician Objective Complete");
+            } else if (simState.collision.collisionOccurred) {
+              const typeText = currentCollisionType === "inelastic" ? "Inelastic (e=0)" : "Elastic (e=1)";
               setExplanation(
-                `Ball 1 moving forward with momentum p₁ = ${p1.toFixed(2)} kg·m/s approaching target Ball 2.`
+                `Collision outcome [${typeText}]: System momentum p_tot = ${pTot.toFixed(2)} kg·m/s conserved. KE = ${keTot.toFixed(2)} J.`
               );
-              setFormulaTag("p_tot = m₁v₁ + m₂v₂");
-            } else if (v2 > 0.1) {
+              setFormulaTag("p_system_before = p_system_after");
+            } else if (v1 > 0.1 || v2 > 0.05) {
               setExplanation(
-                `Collision result: Momentum conserved (p_tot = ${pTot.toFixed(2)} kg·m/s). Mode: ${currentCollisionType}.`
+                `Approaching Collision: Pod 1 incoming at v₁ = ${b1.vx.toFixed(2)} m/s, Drone 2 at v₂ = ${b2.vx.toFixed(2)} m/s.`
               );
-              setFormulaTag("m₁v₁ + m₂v₂ = m₁v₁' + m₂v₂'");
+              setFormulaTag("Approaching Collision Nexus");
             } else {
               setExplanation(
-                "Both bodies at rest. Push Ball 1 toward Ball 2 to trigger an isolated collision!"
+                "Strategist Arena ready. Select masses, collision type, and click Launch Collision [Space]!"
               );
-              setFormulaTag("Conservation of Momentum");
+              setFormulaTag("m₁v₁ + m₂v₂ = m₁v₁' + m₂v₂'");
             }
           } else if (currentExp === "projectile") {
             const proj = simState.projectile;
@@ -3295,7 +3855,7 @@ export default function App() {
         collisionType={collisionType}
         onToggleCollisionType={setCollisionType}
         onFireProjectile={() => simControlsRef.current.fireProjectile?.()}
-        onTriggerImpact={() => simControlsRef.current.triggerImpact?.()}
+        onTriggerImpact={(f, dt, dir) => simControlsRef.current.triggerImpact?.(f, dt, dir)}
         onLaunchBall1={() => simControlsRef.current.launchBall1?.()}
         onResetBall={() => simControlsRef.current.resetSim?.(activeExpId)}
         isPaused={isPaused}
@@ -3307,6 +3867,26 @@ export default function App() {
           });
         }}
         onOpenReport={() => setIsReportOpen(true)}
+        // Game 1: Force Arena callbacks
+        onThrustCart={(f) => simControlsRef.current.thrustCart?.(f)}
+        onBrakeCart={(f) => simControlsRef.current.brakeCart?.(f)}
+        onStopCart={() => simControlsRef.current.stopCart?.()}
+        // Game 2: Impulse Rush callbacks & params
+        strikeForce={strikeForce}
+        onStrikeForceChange={setStrikeForce}
+        strikeDuration={strikeDuration}
+        onStrikeDurationChange={setStrikeDuration}
+        strikeDirection={strikeDirection}
+        onStrikeDirectionChange={setStrikeDirection}
+        onSoftLandingTest={() => simControlsRef.current.softLandingTest?.()}
+        onCompareImpulses={() => simControlsRef.current.compareImpulses?.()}
+        // Game 3: Collision Chaos callbacks & params
+        v1Init={v1Init}
+        onV1InitChange={setV1Init}
+        v2Init={v2Init}
+        onV2InitChange={setV2Init}
+        onLaunchCollision={(v1, v2) => simControlsRef.current.launchCollision?.(v1, v2)}
+        onReplayCollision={() => simControlsRef.current.replayCollision?.()}
         // Experiment 6: Pendulum props
         pendulumLength={pendulumLength}
         onChangePendulumLength={setPendulumLength}

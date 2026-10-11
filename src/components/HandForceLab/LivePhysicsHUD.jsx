@@ -1,5 +1,19 @@
 import { useState } from 'react';
-import { Activity, TrendingUp, RotateCcw, Play, Pause, FileText, Zap } from 'lucide-react';
+import {
+  Activity,
+  TrendingUp,
+  RotateCcw,
+  Play,
+  Pause,
+  FileText,
+  Zap,
+  Shield,
+  Target,
+  ArrowUp,
+  ArrowDown,
+  Square,
+  Sparkles
+} from 'lucide-react';
 import PhysicsLiveGraph from './PhysicsLiveGraph';
 
 export default function LivePhysicsHUD({
@@ -28,6 +42,26 @@ export default function LivePhysicsHUD({
   isPaused = false,
   onTogglePause,
   onOpenReport,
+  // Game 1: Force Arena specific callbacks
+  onThrustCart,
+  onBrakeCart,
+  onStopCart,
+  // Game 2: Impulse Rush specific callbacks & params
+  strikeForce = 25.0,
+  onStrikeForceChange,
+  strikeDuration = 80,
+  onStrikeDurationChange,
+  strikeDirection = 1,
+  onStrikeDirectionChange,
+  onSoftLandingTest,
+  onCompareImpulses,
+  // Game 3: Collision Chaos specific callbacks & params
+  v1Init = 3.5,
+  onV1InitChange,
+  v2Init = 0.0,
+  onV2InitChange,
+  onLaunchCollision,
+  onReplayCollision,
   // Parameter controls for New Experiments (6-10)
   // 6. Pendulum
   pendulumLength = 1.0,
@@ -122,7 +156,11 @@ export default function LivePhysicsHUD({
     inclineNormal = 8.88,
     inclineFriction = 4.14,
     inclineAccel = 0,
-    inclineSlipping = false
+    inclineSlipping = false,
+    // Three Legends Game Telemetry
+    inRescueZone = false,
+    forensicData = null,
+    targetReached = false
   } = physicsData || {};
 
   return (
@@ -156,33 +194,50 @@ export default function LivePhysicsHUD({
       {activeTab === 'telemetry' && (
         <div className="hud-telemetry-content">
           {/* =========================================================
-              MODE 1: NEWTON'S 2ND LAW
+              GAME 1: FORCE ARENA — The Acceleration Architect
               ========================================================= */}
           {activeExperimentId === 'newton' && (
             <>
+              {/* Mission Game Banner */}
+              <div className="game-banner-force">
+                <div className="game-banner-badge">
+                  <Target className="btn-icon-xs" style={{ color: '#38d9ff' }} />
+                  <span>FORCE ARENA · RESCUE RUN</span>
+                </div>
+                <div className={`game-zone-status ${inRescueZone || (posX >= 0.42 && posX <= 0.72 && Math.abs(velocity) < 0.35) ? 'zone-docked' : posX > 0.72 ? 'zone-overshot' : 'zone-approaching'}`}>
+                  {inRescueZone || (posX >= 0.42 && posX <= 0.72 && Math.abs(velocity) < 0.35)
+                    ? '🎯 DOCKED IN SAFE ZONE'
+                    : posX > 0.72
+                    ? '⚠️ OVERSHOT DOCK'
+                    : '🚀 EN ROUTE TO DOCK'}
+                </div>
+              </div>
+
               <div className="live-data-grid">
                 <div className="data-tile tile-mass">
-                  <span>MASS (m)</span>
+                  <span>PAYLOAD MASS (m)</span>
                   <strong>{Number(mass).toFixed(2)} kg</strong>
                 </div>
 
                 <div className="data-tile tile-force">
-                  <span>NET FORCE (F)</span>
-                  <strong>{Number(force).toFixed(2)} N</strong>
+                  <span>NET FORCE (F_net)</span>
+                  <strong style={{ color: Number(force) > 0 ? '#38d9ff' : Number(force) < 0 ? '#ff3b5c' : '#ffffff' }}>
+                    {Number(force).toFixed(2)} N
+                  </strong>
                 </div>
 
                 <div className="data-tile tile-accel">
-                  <span>ACCEL (a = F/m)</span>
+                  <span>ACCELERATION (a = F/m)</span>
                   <strong>{Number(acceleration).toFixed(2)} m/s²</strong>
                 </div>
 
                 <div className="data-tile tile-vel">
-                  <span>SPEED (|v|)</span>
+                  <span>CART VELOCITY (v)</span>
                   <strong>{Number(velocity).toFixed(2)} m/s</strong>
                 </div>
 
                 <div className="data-tile">
-                  <span>MOMENTUM (p)</span>
+                  <span>MOMENTUM (p = m·v)</span>
                   <strong>{Number(momentum).toFixed(2)} kg·m/s</strong>
                 </div>
 
@@ -192,24 +247,57 @@ export default function LivePhysicsHUD({
                 </div>
 
                 <div className="data-tile wide">
-                  <span>BALL POSITION (X, Y)</span>
+                  <span>TRACK TELEMETRY</span>
                   <strong>
-                    X: {posX >= 0 ? `+${Number(posX).toFixed(2)}` : Number(posX).toFixed(2)} | Y: {posY >= 0 ? `+${Number(posY).toFixed(2)}` : Number(posY).toFixed(2)}
+                    Pos: X {Number(posX).toFixed(2)}m, Y {Number(posY).toFixed(2)}m | Distance to Dock: {Math.abs(0.58 - Number(posX)).toFixed(2)}m
                   </strong>
                 </div>
               </div>
 
+              {/* Thruster & Retro-Braking Direct Controls */}
+              <div className="thruster-control-grid">
+                <button
+                  type="button"
+                  className="btn-thruster btn-thrust-forward"
+                  onClick={() => onThrustCart ? onThrustCart() : onAppliedForceManualChange?.(appliedForceManual + 4)}
+                  title="Apply forward thruster force (+6.0 N) [▲ / W / Right]"
+                >
+                  <ArrowUp className="btn-icon-xs" />
+                  Forward Thrust
+                </button>
+
+                <button
+                  type="button"
+                  className="btn-thruster btn-thrust-brake"
+                  onClick={() => onBrakeCart ? onBrakeCart() : onAppliedForceManualChange?.(Math.max(-12, appliedForceManual - 6))}
+                  title="Apply retro-braking reverse force (-8.0 N) [▼ / S / Left]"
+                >
+                  <ArrowDown className="btn-icon-xs" />
+                  Retro-Brake
+                </button>
+
+                <button
+                  type="button"
+                  className="btn-thruster btn-thrust-stop"
+                  onClick={() => onStopCart ? onStopCart() : onAppliedForceManualChange?.(0)}
+                  title="Emergency stop handbrake [B]"
+                >
+                  <Square className="btn-icon-xs" />
+                  Emergency Stop
+                </button>
+              </div>
+
               {/* Parameter Controls */}
-              <div className="mass-control-group">
+              <div className="mass-control-group" style={{ marginTop: '10px' }}>
                 <div className="mass-label-row">
-                  <span>ADJUST MASS (Inertia):</span>
-                  <strong>{Number(mass).toFixed(1)} kg</strong>
+                  <span>RESCUE CART PAYLOAD (Inertia):</span>
+                  <strong>{Number(mass).toFixed(1)} kg ({Math.max(1, Math.round(mass * 2))} Pods)</strong>
                 </div>
                 <input
                   type="range"
-                  min="0.2"
-                  max="5.0"
-                  step="0.1"
+                  min="0.5"
+                  max="4.0"
+                  step="0.5"
                   className="mass-slider"
                   value={mass}
                   onChange={(e) => onMassChange?.(parseFloat(e.target.value))}
@@ -222,7 +310,7 @@ export default function LivePhysicsHUD({
                       className={`mass-pill ${Math.abs(mass - mVal) < 0.05 ? 'active' : ''}`}
                       onClick={() => onMassChange?.(mVal)}
                     >
-                      {mVal}kg
+                      {mVal}kg ({Math.max(1, Math.round(mVal * 2))}P)
                     </button>
                   ))}
                 </div>
@@ -230,12 +318,12 @@ export default function LivePhysicsHUD({
                 {onAppliedForceManualChange && (
                   <>
                     <div className="mass-label-row" style={{ marginTop: '10px' }}>
-                      <span>DIRECT APPLIED FORCE:</span>
+                      <span>DIRECT THRUST FORCE:</span>
                       <strong>{Number(appliedForceManual).toFixed(1)} N</strong>
                     </div>
                     <input
                       type="range"
-                      min="0.0"
+                      min="-10.0"
                       max="12.0"
                       step="0.5"
                       className="mass-slider"
@@ -249,13 +337,28 @@ export default function LivePhysicsHUD({
           )}
 
           {/* =========================================================
-              MODE 2: IMPULSE & MOMENTUM (J = F · Δt = Δp)
+              GAME 2: IMPULSE RUSH — Master of Impact
               ========================================================= */}
           {activeExperimentId === 'impulse' && (
             <>
+              {/* Mission Game Banner */}
+              <div className="game-banner-impulse">
+                <div className="game-banner-badge" style={{ color: '#ffa038' }}>
+                  <Zap className="btn-icon-xs" style={{ color: '#ffa038' }} />
+                  <span>IMPULSE RUSH · IMPACT LAB</span>
+                </div>
+                <div className={`game-zone-status ${(Number(contactTime) * 1000) >= 120 && Number(peakForce || force) <= 18 ? 'zone-docked' : 'zone-approaching'}`}>
+                  {(Number(contactTime) * 1000) >= 120 && Number(peakForce || force) <= 18
+                    ? '🛡️ SOFT CUSHION'
+                    : Number(peakForce || force) > 25
+                    ? '💥 HIGH PEAK IMPACT'
+                    : '⚡ CHAMBER READY'}
+                </div>
+              </div>
+
               <div className="live-data-grid">
                 <div className="data-tile tile-force">
-                  <span>PEAK FORCE (F_max)</span>
+                  <span>PEAK FORCE (F_peak)</span>
                   <strong>{Number(peakForce || force).toFixed(2)} N</strong>
                 </div>
 
@@ -266,46 +369,120 @@ export default function LivePhysicsHUD({
 
                 <div className="data-tile tile-vel">
                   <span>IMPULSE (J = F·Δt)</span>
-                  <strong>{Number(impulseJ).toFixed(3)} N·s</strong>
+                  <strong style={{ color: '#ffa038' }}>{Number(impulseJ).toFixed(3)} N·s</strong>
                 </div>
 
                 <div className="data-tile">
                   <span>MOMENTUM CHG (Δp)</span>
-                  <strong>{Number(deltaMomentum).toFixed(3)} kg·m/s</strong>
+                  <strong style={{ color: '#31f2a1' }}>{Number(deltaMomentum).toFixed(3)} kg·m/s</strong>
                 </div>
 
                 <div className="data-tile tile-mass">
-                  <span>TARGET MASS (m)</span>
+                  <span>PROBE MASS (m)</span>
                   <strong>{Number(mass).toFixed(2)} kg</strong>
                 </div>
 
                 <div className="data-tile">
-                  <span>SPEED (|v|)</span>
+                  <span>PROBE SPEED (|v|)</span>
                   <strong>{Number(velocity).toFixed(2)} m/s</strong>
                 </div>
 
                 <div className="data-tile wide">
-                  <span>IMPULSE EQUALITY CHECK</span>
+                  <span>IMPULSE-MOMENTUM EQUALITY</span>
                   <strong style={{ color: Math.abs(impulseJ - deltaMomentum) < 0.05 && impulseJ > 0 ? '#31f2a1' : '#38d9ff' }}>
-                    J ({Number(impulseJ).toFixed(2)} N·s) ≈ Δp ({Number(deltaMomentum).toFixed(2)} kg·m/s)
+                    J ({Number(impulseJ).toFixed(2)} N·s) ≡ Δp ({Number(deltaMomentum).toFixed(2)} kg·m/s)
                   </strong>
                 </div>
               </div>
 
-              <div className="mass-control-group">
+              {/* Impact Controls */}
+              <div className="mass-control-group" style={{ marginTop: '8px' }}>
                 <div className="mass-label-row">
-                  <span>TARGET OBJECT MASS:</span>
-                  <strong>{Number(mass).toFixed(1)} kg</strong>
+                  <span>STRIKE FORCE:</span>
+                  <strong>{Number(strikeForce || 25).toFixed(0)} N</strong>
                 </div>
                 <input
                   type="range"
-                  min="0.2"
-                  max="4.0"
-                  step="0.1"
+                  min="5"
+                  max="50"
+                  step="5"
                   className="mass-slider"
-                  value={mass}
-                  onChange={(e) => onMassChange?.(parseFloat(e.target.value))}
+                  value={strikeForce || 25}
+                  onChange={(e) => onStrikeForceChange?.(parseFloat(e.target.value))}
                 />
+
+                <div className="mass-label-row" style={{ marginTop: '8px' }}>
+                  <span>CONTACT DURATION (Δt):</span>
+                  <strong>{Number(strikeDuration || 80).toFixed(0)} ms</strong>
+                </div>
+                <input
+                  type="range"
+                  min="20"
+                  max="350"
+                  step="10"
+                  className="mass-slider"
+                  value={strikeDuration || 80}
+                  onChange={(e) => onStrikeDurationChange?.(parseFloat(e.target.value))}
+                />
+
+                <div className="mass-label-row" style={{ marginTop: '8px' }}>
+                  <span>IMPACT DIRECTION:</span>
+                  <strong>{strikeDirection > 0 ? '+X (Forward Impact)' : '-X (Retro/Braking Impact)'}</strong>
+                </div>
+                <div className="quick-mass-pills">
+                  <button
+                    type="button"
+                    className={`mass-pill ${strikeDirection > 0 ? 'active' : ''}`}
+                    onClick={() => onStrikeDirectionChange?.(1)}
+                  >
+                    ➡️ Forward (+X)
+                  </button>
+                  <button
+                    type="button"
+                    className={`mass-pill ${strikeDirection < 0 ? 'active' : ''}`}
+                    onClick={() => onStrikeDirectionChange?.(-1)}
+                  >
+                    ⬅️ Retro (-X)
+                  </button>
+                </div>
+
+                <div className="hud-btn-row" style={{ marginTop: '10px' }}>
+                  <button
+                    type="button"
+                    className="btn-hud-action btn-piston-fire"
+                    onClick={() => onTriggerImpact?.(strikeForce || 25, (strikeDuration || 80) / 1000, strikeDirection || 1)}
+                    style={{ flex: 1.2 }}
+                  >
+                    <Zap className="btn-icon-xs" />
+                    Trigger Piston Strike [Space]
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn-hud-action btn-soft-landing"
+                    onClick={() => onSoftLandingTest ? onSoftLandingTest() : onTriggerImpact?.(8.0, 0.25, -1)}
+                    style={{ flex: 1 }}
+                  >
+                    <Shield className="btn-icon-xs" />
+                    Soft Landing
+                  </button>
+                </div>
+
+                {onCompareImpulses && (
+                  <button
+                    type="button"
+                    className="btn-hud-action"
+                    onClick={onCompareImpulses}
+                    style={{ width: '100%', marginTop: '6px', background: 'rgba(255, 160, 56, 0.15)', borderColor: 'rgba(255, 160, 56, 0.4)' }}
+                  >
+                    ⚖️ Compare Pulses (High F, Low Δt vs Low F, High Δt)
+                  </button>
+                )}
+
+                <div className="mass-label-row" style={{ marginTop: '10px' }}>
+                  <span>PROBE MASS (Inertia):</span>
+                  <strong>{Number(mass).toFixed(1)} kg</strong>
+                </div>
                 <div className="quick-mass-pills">
                   {[0.5, 1.0, 2.0].map((mVal) => (
                     <button
@@ -318,18 +495,6 @@ export default function LivePhysicsHUD({
                     </button>
                   ))}
                 </div>
-
-                {onTriggerImpact && (
-                  <button
-                    type="button"
-                    className="btn-hud-action btn-fire"
-                    onClick={onTriggerImpact}
-                    style={{ width: '100%', marginTop: '10px' }}
-                  >
-                    <Zap className="btn-icon-xs" />
-                    Trigger High Impulse Strike (Click Alternative)
-                  </button>
-                )}
               </div>
             </>
           )}
@@ -407,19 +572,30 @@ export default function LivePhysicsHUD({
           )}
 
           {/* =========================================================
-              MODE 4: COLLISIONS & MOMENTUM CONSERVATION
+              GAME 3: COLLISION CHAOS — The Collision Strategist
               ========================================================= */}
           {activeExperimentId === 'collision' && (
             <>
+              {/* Mission Game Banner */}
+              <div className="game-banner-collision">
+                <div className="game-banner-badge" style={{ color: '#e040fb' }}>
+                  <Sparkles className="btn-icon-xs" style={{ color: '#e040fb' }} />
+                  <span>COLLISION CHAOS · STRATEGIST</span>
+                </div>
+                <div className={`game-zone-status ${targetReached || v2 >= 2.0 ? 'zone-docked' : 'zone-approaching'}`}>
+                  {targetReached || v2 >= 2.0 ? '🎯 TARGET DOCKED' : '⚡ ARENA READY'}
+                </div>
+              </div>
+
               <div className="live-data-grid">
                 <div className="data-tile tile-vel">
-                  <span>BALL 1 SPEED (v₁)</span>
-                  <strong>{Number(v1).toFixed(2)} m/s</strong>
+                  <span>STRIKER SPEED (v₁)</span>
+                  <strong style={{ color: '#38d9ff' }}>{Number(v1).toFixed(2)} m/s</strong>
                 </div>
 
                 <div className="data-tile tile-vel">
-                  <span>BALL 2 SPEED (v₂)</span>
-                  <strong>{Number(v2).toFixed(2)} m/s</strong>
+                  <span>DRONE SPEED (v₂)</span>
+                  <strong style={{ color: '#e040fb' }}>{Number(v2).toFixed(2)} m/s</strong>
                 </div>
 
                 <div className="data-tile tile-mass">
@@ -433,24 +609,54 @@ export default function LivePhysicsHUD({
                 </div>
 
                 <div className="data-tile tile-accel">
-                  <span>TOTAL MOMENTUM</span>
+                  <span>TOTAL MOMENTUM (p_tot)</span>
                   <strong style={{ color: '#31f2a1' }}>{Number(pTotal).toFixed(2)} kg·m/s</strong>
                 </div>
 
                 <div className="data-tile">
-                  <span>TOTAL KINETIC ENERGY</span>
+                  <span>TOTAL KE (KE_tot)</span>
                   <strong>{Number(keTotal).toFixed(2)} J</strong>
                 </div>
 
                 <div className="data-tile wide">
                   <span>COLLISION MODE</span>
                   <strong style={{ color: collisionType === 'elastic' ? '#31f2a1' : '#ffbb33' }}>
-                    {collisionType === 'elastic' ? '⚡ ELASTIC (KE Conserved)' : '🔒 INELASTIC (Objects Stick)'}
+                    {collisionType === 'elastic' ? '⚡ ELASTIC (KE & p Conserved)' : '🔒 INELASTIC (Coupled Stick, KE Dissipated)'}
                   </strong>
                 </div>
               </div>
 
-              <div className="mass-control-group">
+              {/* Crash Forensics Matrix Table */}
+              {forensicData && (
+                <table className="forensic-matrix-table" aria-label="Crash Forensics Matrix">
+                  <thead>
+                    <tr>
+                      <th>METRIC</th>
+                      <th>INITIAL</th>
+                      <th>FINAL</th>
+                      <th>CONSERVATION</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Total Momentum (p)</td>
+                      <td>{Number(forensicData.pInitial).toFixed(2)} kg·m/s</td>
+                      <td>{Number(forensicData.pFinal).toFixed(2)} kg·m/s</td>
+                      <td style={{ color: '#31f2a1', fontWeight: 700 }}>100% (Δp ≈ 0)</td>
+                    </tr>
+                    <tr>
+                      <td>Total Energy (KE)</td>
+                      <td>{Number(forensicData.keInitial).toFixed(2)} J</td>
+                      <td>{Number(forensicData.keFinal).toFixed(2)} J</td>
+                      <td style={{ color: collisionType === 'elastic' ? '#31f2a1' : '#ffbb33', fontWeight: 700 }}>
+                        {collisionType === 'elastic' ? '100% Conserved' : `Dissipated (${(forensicData.keDelta).toFixed(2)} J)`}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
+
+              <div className="mass-control-group" style={{ marginTop: '8px' }}>
                 <div className="mass-label-row">
                   <span>COLLISION RESTITUTION:</span>
                   <strong>{collisionType.toUpperCase()}</strong>
@@ -473,7 +679,7 @@ export default function LivePhysicsHUD({
                 </div>
 
                 <div className="mass-label-row" style={{ marginTop: '8px' }}>
-                  <span>BALL 1 MASS (Cyan):</span>
+                  <span>STRIKER POD MASS (Cyan):</span>
                   <strong>{Number(mass).toFixed(1)} kg</strong>
                 </div>
                 <input
@@ -487,7 +693,7 @@ export default function LivePhysicsHUD({
                 />
 
                 <div className="mass-label-row" style={{ marginTop: '8px' }}>
-                  <span>BALL 2 MASS (Magenta):</span>
+                  <span>TARGET DRONE MASS (Magenta):</span>
                   <strong>{Number(mass2).toFixed(1)} kg</strong>
                 </div>
                 <input
@@ -500,16 +706,55 @@ export default function LivePhysicsHUD({
                   onChange={(e) => onMass2Change?.(parseFloat(e.target.value))}
                 />
 
-                {onLaunchBall1 && (
+                <div className="mass-label-row" style={{ marginTop: '8px' }}>
+                  <span>STRIKER INITIAL SPEED (v₁):</span>
+                  <strong>{Number(v1Init).toFixed(1)} m/s</strong>
+                </div>
+                <input
+                  type="range"
+                  min="1.0"
+                  max="6.0"
+                  step="0.5"
+                  className="mass-slider"
+                  value={v1Init}
+                  onChange={(e) => onV1InitChange?.(parseFloat(e.target.value))}
+                />
+
+                <div className="mass-label-row" style={{ marginTop: '8px' }}>
+                  <span>TARGET DRONE INITIAL SPEED (v₂):</span>
+                  <strong>{Number(v2Init).toFixed(1)} m/s</strong>
+                </div>
+                <input
+                  type="range"
+                  min="-2.0"
+                  max="2.0"
+                  step="0.5"
+                  className="mass-slider"
+                  value={v2Init}
+                  onChange={(e) => onV2InitChange?.(parseFloat(e.target.value))}
+                />
+
+                <div className="hud-btn-row" style={{ marginTop: '10px' }}>
                   <button
                     type="button"
                     className="btn-hud-action btn-fire"
-                    onClick={onLaunchBall1}
-                    style={{ width: '100%', marginTop: '10px' }}
+                    onClick={() => onLaunchCollision ? onLaunchCollision(v1Init, v2Init) : onLaunchBall1?.()}
+                    style={{ flex: 1.2 }}
                   >
-                    Launch Ball 1 into Ball 2
+                    🚀 Launch Collision [Space]
                   </button>
-                )}
+
+                  {onReplayCollision && (
+                    <button
+                      type="button"
+                      className="btn-hud-action"
+                      onClick={onReplayCollision}
+                      style={{ flex: 1 }}
+                    >
+                      ⏪ Slow-Mo Replay
+                    </button>
+                  )}
+                </div>
               </div>
             </>
           )}
