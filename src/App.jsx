@@ -32,7 +32,8 @@ import LabReportModal from "./components/HandForceLab/LabReportModal";
 import ProjectIntroModal from "./components/portal/ProjectIntroModal";
 import { EXPERIMENTS, EXPERIMENT_LIST } from "./data/experimentsData";
 import { QUEST_MISSIONS, QUEST_PREDICTIONS } from "./data/questMissionsData";
-import { getExperimentRecord } from "./auth/experimentStorage";
+import { getExperimentRecord, saveExperimentReportSnapshot } from "./auth/experimentStorage";
+import { createExperimentReportSnapshot } from "./physics/reportGenerator";
 import { getDisplayName, getSession, getCurrentUser } from "./auth/authStorage";
 import {
   getQuestProfile,
@@ -74,6 +75,7 @@ export default function App() {
   const [isQuizOpen, setIsQuizOpen] = useState(false);
   const [isGuidedModeOpen, setIsGuidedModeOpen] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
+  const [activeReportSnapshot, setActiveReportSnapshot] = useState(null);
   const [isIntroOpen, setIsIntroOpen] = useState(false);
 
   // Physics Quest State
@@ -259,6 +261,104 @@ export default function App() {
     isFrozen: false
   });
 
+  // Session Cumulative & Peak Telemetry Ref (for scientific lab reports)
+  const sessionTelemetryRef = useRef({
+    newton: {
+      hasInteracted: false,
+      peakForce: 0,
+      peakAcceleration: 0,
+      peakVelocity: 0,
+      peakMomentum: 0,
+      peakKineticEnergy: 0,
+      dockAchieved: false,
+      mass: 1.0,
+      dragCoeff: 0.55
+    },
+    impulse: {
+      hasInteracted: false,
+      peakForce: 0,
+      contactTime: 0,
+      impulseJ: 0,
+      deltaP: 0,
+      mass: 1.0
+    },
+    hooke: {
+      hasInteracted: false,
+      maxDisplacement: 0,
+      peakForce: 0,
+      peakPE: 0,
+      peakKE: 0,
+      springK: 25.0,
+      mass: 1.0
+    },
+    collision: {
+      hasInteracted: false,
+      collisionOccurred: false,
+      forensicData: null,
+      b1Mass: 1.0,
+      b2Mass: 1.0
+    },
+    projectile: {
+      hasInteracted: false,
+      range: 0,
+      maxHeight: 0,
+      flightTime: 0,
+      angle: 45,
+      v0: 5.0
+    },
+    pendulum: {
+      hasInteracted: false,
+      maxThetaDeg: 0,
+      peakOmega: 0,
+      length: 1.5,
+      mass: 0.8,
+      peakPE: 0,
+      peakKE: 0
+    },
+    electric: {
+      hasInteracted: false,
+      probeX: 0,
+      probeY: 0.35,
+      fieldMag: 0,
+      potential: 0,
+      force: 0,
+      q1: 2.0,
+      q2: -2.0,
+      probeQ: 1.0
+    },
+    wave: {
+      hasInteracted: false,
+      a1: 1.0,
+      a2: 1.0,
+      freq: 1.0,
+      phaseDeg: 0,
+      resultantAmp: 2.0,
+      regime: 'CONSTRUCTIVE'
+    },
+    optics: {
+      hasInteracted: false,
+      incidentAngleDeg: 45,
+      n1: 1.0,
+      n2: 1.5,
+      refractAngle: 28.1,
+      isTIR: false,
+      criticalAngle: null
+    },
+    incline: {
+      hasInteracted: false,
+      angleDeg: 25,
+      mass: 1.0,
+      muStatic: 0.45,
+      muKinetic: 0.30,
+      normalForce: 8.88,
+      frictionForce: 2.66,
+      netForce: 1.48,
+      accel: 1.48,
+      isSlipping: true,
+      velocity: 0
+    }
+  });
+
   // Reference for callbacks into the running simulation
   const simControlsRef = useRef({
     resetSim: null,
@@ -353,10 +453,35 @@ export default function App() {
     setSearchParams({ exp: expId });
     const rec = getExperimentRecord(expId);
     setQuizScoreBadge(rec ? rec.score : null);
+    setLastQuizResult(null);
+    setActiveReportSnapshot(null);
     if (simControlsRef.current.resetSim) {
       simControlsRef.current.resetSim(expId);
     }
   };
+
+  // Open & Generate an Immutable Lab Report Snapshot
+  const handleOpenReport = useCallback((overrideExp = null) => {
+    const targetExp = overrideExp || activeExperiment;
+    const expId = targetExp.id;
+    const sessionMet = sessionTelemetryRef.current ? sessionTelemetryRef.current[expId] : null;
+
+    const snapshot = createExperimentReportSnapshot({
+      experimentId: expId,
+      experiment: targetExp,
+      physicsData: physicsState,
+      sessionMetrics: sessionMet,
+      quizResult: lastQuizResult || (quizScoreBadge !== null ? { score: quizScoreBadge } : null),
+      studentName: studentName || "Student Physicist",
+      userConfig: settingsRef.current
+    });
+
+    setActiveReportSnapshot(snapshot);
+    setIsReportOpen(true);
+
+    const userKey = session?.email || "anonymous";
+    saveExperimentReportSnapshot(expId, snapshot, userKey);
+  }, [activeExperiment, physicsState, lastQuizResult, quizScoreBadge, studentName, session?.email]);
 
   // Sync settings into simulation
   useEffect(() => {
@@ -2240,6 +2365,33 @@ export default function App() {
           currentAccelMag = Math.abs(cart.ax);
           currentSpeedMag = Math.abs(cart.vx);
 
+          // Update Newton's 2nd Law session peak measurements
+          const nMetrics = sessionTelemetryRef.current.newton;
+          nMetrics.mass = cart.mass;
+          if (currentForceMag > 0.05 || currentSpeedMag > 0.05 || cart.inRescueZone) {
+            nMetrics.hasInteracted = true;
+          }
+          if (currentForceMag > nMetrics.peakForce) {
+            nMetrics.peakForce = currentForceMag;
+          }
+          if (currentAccelMag > nMetrics.peakAcceleration) {
+            nMetrics.peakAcceleration = currentAccelMag;
+          }
+          if (currentSpeedMag > nMetrics.peakVelocity) {
+            nMetrics.peakVelocity = currentSpeedMag;
+          }
+          const currMom = cart.mass * currentSpeedMag;
+          if (currMom > nMetrics.peakMomentum) {
+            nMetrics.peakMomentum = currMom;
+          }
+          const currKE = 0.5 * cart.mass * currentSpeedMag * currentSpeedMag;
+          if (currKE > nMetrics.peakKineticEnergy) {
+            nMetrics.peakKineticEnergy = currKE;
+          }
+          if (cart.inRescueZone) {
+            nMetrics.dockAchieved = true;
+          }
+
           // Animate Rescue Cart 3D Meshes
           cartGroup.position.set(cart.x, 0, 0);
 
@@ -3022,6 +3174,7 @@ export default function App() {
 
           if (currentExp === "newton") {
             const cart = simState.newton;
+            const nMetrics = sessionTelemetryRef.current.newton;
             const p = cart.mass * currentSpeedMag;
             const ke = 0.5 * cart.mass * currentSpeedMag * currentSpeedMag;
 
@@ -3058,7 +3211,12 @@ export default function App() {
               inRescueZone: cart.inRescueZone,
               dockTargetX: cart.dockTargetX,
               isThrusting: cart.isThrusting,
-              isBraking: cart.isBraking
+              isBraking: cart.isBraking,
+              peakForce: nMetrics.peakForce,
+              peakAcceleration: nMetrics.peakAcceleration,
+              peakVelocity: nMetrics.peakVelocity,
+              peakMomentum: nMetrics.peakMomentum,
+              hasInteracted: nMetrics.hasInteracted
             });
 
             if (effectiveFrozen) {
@@ -3088,6 +3246,24 @@ export default function App() {
             }
           } else if (currentExp === "impulse") {
             const probe = simState.impulse;
+            const impMetrics = sessionTelemetryRef.current.impulse;
+            impMetrics.mass = probe.mass;
+            if (probe.peakForce > 0.1 || probe.impulseJ > 0 || probe.deltaP > 0) {
+              impMetrics.hasInteracted = true;
+            }
+            if (probe.peakForce > impMetrics.peakForce) {
+              impMetrics.peakForce = probe.peakForce;
+            }
+            if (probe.contactTime > impMetrics.contactTime) {
+              impMetrics.contactTime = probe.contactTime;
+            }
+            if (probe.impulseJ > impMetrics.impulseJ) {
+              impMetrics.impulseJ = probe.impulseJ;
+            }
+            if (probe.deltaP > impMetrics.deltaP) {
+              impMetrics.deltaP = probe.deltaP;
+            }
+
             telemetryRef.current = {
               experimentName: "Impulse & Momentum Lab",
               mass: probe.mass,
@@ -3116,7 +3292,8 @@ export default function App() {
               impulseJ: probe.impulseJ,
               deltaMomentum: probe.deltaP,
               mass: probe.mass,
-              pistonActive: probe.pistonActive
+              pistonActive: probe.pistonActive,
+              hasInteracted: impMetrics.hasInteracted
             });
 
             if (probe.isContact) {
@@ -3140,6 +3317,17 @@ export default function App() {
             const u = 0.5 * spring.k * spring.x * spring.x;
             const ke = 0.5 * spring.mass * spring.vx * spring.vx;
 
+            const hMetrics = sessionTelemetryRef.current.hooke;
+            hMetrics.springK = spring.k;
+            hMetrics.mass = spring.mass;
+            if (Math.abs(spring.x) > 0.02 || spring.isHandGrab || currentSpeedMag > 0.05) {
+              hMetrics.hasInteracted = true;
+            }
+            hMetrics.maxDisplacement = Math.max(hMetrics.maxDisplacement, Math.abs(spring.x));
+            hMetrics.peakForce = Math.max(hMetrics.peakForce, Math.abs(-spring.k * spring.x));
+            hMetrics.peakPE = Math.max(hMetrics.peakPE, u);
+            hMetrics.peakKE = Math.max(hMetrics.peakKE, ke);
+
             telemetryRef.current = {
               experimentName: "Hooke's Law & Springs",
               mass: spring.mass,
@@ -3158,7 +3346,8 @@ export default function App() {
               kineticEnergy: ke,
               velocity: currentSpeedMag,
               springK: spring.k,
-              mass: spring.mass
+              mass: spring.mass,
+              hasInteracted: hMetrics.hasInteracted
             });
 
             if (spring.isHandGrab) {
@@ -3186,6 +3375,19 @@ export default function App() {
             const pTot = b1.mass * b1.vx + b2.mass * b2.vx;
             const keTot = 0.5 * b1.mass * b1.vx * b1.vx + 0.5 * b2.mass * b2.vx * b2.vx;
 
+            const cMetrics = sessionTelemetryRef.current.collision;
+            cMetrics.b1Mass = b1.mass;
+            cMetrics.b2Mass = b2.mass;
+            if (simState.collision.collisionOccurred || simState.collision.forensicData || v1 > 0.1 || v2 > 0.1) {
+              cMetrics.hasInteracted = true;
+            }
+            if (simState.collision.collisionOccurred) {
+              cMetrics.collisionOccurred = true;
+            }
+            if (simState.collision.forensicData) {
+              cMetrics.forensicData = simState.collision.forensicData;
+            }
+
             telemetryRef.current = {
               experimentName: "Collisions & Momentum",
               mass: b1.mass,
@@ -3208,7 +3410,8 @@ export default function App() {
               forensicData: simState.collision.forensicData,
               targetReached: simState.collision.targetReached,
               collisionOccurred: simState.collision.collisionOccurred,
-              isReplaying: simState.collision.isReplaying
+              isReplaying: simState.collision.isReplaying,
+              hasInteracted: cMetrics.hasInteracted
             });
 
             if (simState.collision.isReplaying) {
@@ -3236,6 +3439,16 @@ export default function App() {
             }
           } else if (currentExp === "projectile") {
             const proj = simState.projectile;
+            const pMetrics = sessionTelemetryRef.current.projectile;
+            pMetrics.angle = proj.angle;
+            pMetrics.v0 = proj.v0;
+            if (proj.isAirborne || proj.flightTime > 0 || proj.range > 0) {
+              pMetrics.hasInteracted = true;
+              pMetrics.range = proj.range;
+              pMetrics.maxHeight = proj.maxHeight;
+              pMetrics.flightTime = proj.flightTime;
+            }
+
             telemetryRef.current = {
               experimentName: "Projectile Motion",
               velocity: Number(currentSpeedMag.toFixed(2)),
@@ -3250,7 +3463,8 @@ export default function App() {
               range: proj.range,
               maxHeight: proj.maxHeight,
               flightTime: proj.flightTime,
-              isAirborne: proj.isAirborne
+              isAirborne: proj.isAirborne,
+              hasInteracted: pMetrics.hasInteracted
             });
 
             if (proj.isAirborne) {
@@ -3270,6 +3484,17 @@ export default function App() {
             const theoPeriod = computePendulumSmallAnglePeriod(pend.length, pend.gravity);
             const u = pend.mass * pend.gravity * pend.length * (1 - Math.cos(pend.theta));
             const ke = 0.5 * pend.mass * Math.pow(pend.length * pend.omega, 2);
+
+            const pendMetrics = sessionTelemetryRef.current.pendulum;
+            if (pend.isGrabbed || Math.abs(pend.omega) > 0.05 || Math.abs(thetaDeg) > 0.5) {
+              pendMetrics.hasInteracted = true;
+            }
+            pendMetrics.length = pend.length;
+            pendMetrics.mass = pend.mass;
+            pendMetrics.maxThetaDeg = Math.max(pendMetrics.maxThetaDeg || 0, Math.abs(thetaDeg));
+            pendMetrics.peakOmega = Math.max(pendMetrics.peakOmega || 0, Math.abs(pend.omega));
+            pendMetrics.peakPE = Math.max(pendMetrics.peakPE || 0, u);
+            pendMetrics.peakKE = Math.max(pendMetrics.peakKE || 0, ke);
 
             telemetryRef.current = {
               experimentName: "Simple Pendulum",
@@ -3292,7 +3517,7 @@ export default function App() {
               velocity: currentSpeedMag,
               acceleration: currentAccelMag,
               force: currentForceMag,
-              hasInteracted: true
+              hasInteracted: pendMetrics.hasInteracted
             });
 
             if (pend.isGrabbed) {
@@ -3321,6 +3546,19 @@ export default function App() {
               probe.y
             );
 
+            const eleMetrics = sessionTelemetryRef.current.electric;
+            if (currentForceMag > 0.05 || Math.abs(probe.x) > 0.05 || Math.abs(probe.y - 0.35) > 0.05 || probe.isGrabbed) {
+              eleMetrics.hasInteracted = true;
+            }
+            eleMetrics.probeX = probe.x;
+            eleMetrics.probeY = probe.y;
+            eleMetrics.fieldMag = fieldAtProbe.magnitude;
+            eleMetrics.potential = potAtProbe;
+            eleMetrics.force = currentForceMag;
+            eleMetrics.q1 = q1.q;
+            eleMetrics.q2 = q2.q;
+            eleMetrics.probeQ = probe.q;
+
             telemetryRef.current = {
               experimentName: "Electric Field & Charges",
               mass: 0.01,
@@ -3339,7 +3577,7 @@ export default function App() {
               force: currentForceMag,
               posX: probe.x,
               posY: probe.y,
-              hasInteracted: true
+              hasInteracted: eleMetrics.hasInteracted
             });
 
             setExplanation(
@@ -3354,6 +3592,15 @@ export default function App() {
               : (w.phaseDeg < 15 || w.phaseDeg > 345)
                 ? 'constructive'
                 : 'partial';
+
+            const waveMetrics = sessionTelemetryRef.current.wave;
+            waveMetrics.hasInteracted = true;
+            waveMetrics.a1 = w.a1;
+            waveMetrics.a2 = w.a2;
+            waveMetrics.freq = w.freq;
+            waveMetrics.phaseDeg = w.phaseDeg;
+            waveMetrics.resultantAmp = resAmp;
+            waveMetrics.regime = regime;
 
             telemetryRef.current = {
               experimentName: "Wave Interference",
@@ -3390,6 +3637,15 @@ export default function App() {
               n2: opt.n2
             });
 
+            const optMetrics = sessionTelemetryRef.current.optics;
+            optMetrics.hasInteracted = true;
+            optMetrics.incidentAngleDeg = opt.incidentAngleDeg;
+            optMetrics.n1 = opt.n1;
+            optMetrics.n2 = opt.n2;
+            optMetrics.refractAngle = rays.refractionAngleDeg;
+            optMetrics.isTIR = rays.isTotalInternalReflection;
+            optMetrics.criticalAngle = rays.criticalAngleDeg;
+
             telemetryRef.current = {
               experimentName: "Reflection & Refraction",
               time: Number(totalSimTime.toFixed(1)),
@@ -3424,6 +3680,21 @@ export default function App() {
             const netF = Math.max(0, parallelGrav - fricF);
             const accel = isSliding ? netF / inc.mass : 0;
 
+            const incMetrics = sessionTelemetryRef.current.incline;
+            if (isSliding || inc.isGrabbed || Math.abs(inc.blockVelocity) > 0.02 || inc.angleDeg !== 25) {
+              incMetrics.hasInteracted = true;
+            }
+            incMetrics.angleDeg = inc.angleDeg;
+            incMetrics.mass = inc.mass;
+            incMetrics.muStatic = inc.muStatic;
+            incMetrics.muKinetic = inc.muKinetic;
+            incMetrics.normalForce = normF;
+            incMetrics.frictionForce = fricF;
+            incMetrics.netForce = netF;
+            incMetrics.accel = accel;
+            incMetrics.velocity = Math.abs(inc.blockVelocity);
+            incMetrics.isSlipping = isSliding;
+
             telemetryRef.current = {
               experimentName: "Friction & Inclined Plane",
               mass: inc.mass,
@@ -3445,7 +3716,7 @@ export default function App() {
               inclineAccel: accel,
               inclineIsSlipping: isSliding,
               velocity: Math.abs(inc.blockVelocity),
-              hasInteracted: true
+              hasInteracted: incMetrics.hasInteracted
             });
 
             if (isSliding) {
@@ -3652,7 +3923,7 @@ export default function App() {
             <button
               type="button"
               className="lab-top-action-btn"
-              onClick={() => setIsReportOpen(true)}
+              onClick={() => handleOpenReport()}
               title="View & Print Official Physics Lab Report"
             >
               <FileText className="btn-icon-sm" />
@@ -3896,7 +4167,7 @@ export default function App() {
               return next;
             });
           }}
-          onOpenReport={() => setIsReportOpen(true)}
+          onOpenReport={() => handleOpenReport()}
           // Game 1: Force Arena callbacks
           onThrustCart={(f) => simControlsRef.current.thrustCart?.(f)}
           onBrakeCart={(f) => simControlsRef.current.brakeCart?.(f)}
@@ -3973,7 +4244,7 @@ export default function App() {
               return next;
             });
           }}
-          onOpenReport={() => setIsReportOpen(true)}
+          onOpenReport={() => handleOpenReport()}
         />
       </aside>
 
@@ -4042,6 +4313,7 @@ export default function App() {
       <LabReportModal
         isOpen={isReportOpen}
         onClose={() => setIsReportOpen(false)}
+        reportSnapshot={activeReportSnapshot}
         experiment={activeExperiment}
         physicsData={physicsState}
         quizResult={lastQuizResult || (quizScoreBadge !== null ? { score: quizScoreBadge } : null)}

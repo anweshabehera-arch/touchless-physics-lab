@@ -295,3 +295,41 @@ export function clearExperimentHistory(userIdentifier = null) {
     // Ignore storage write error
   }
 }
+
+/**
+ * Generate a sanitized, user-specific localStorage key for an experiment report snapshot.
+ */
+export function getReportStorageKey(expId, userIdentifier = null) {
+  const userKey = (userIdentifier || getCurrentUserKey()).trim().toLowerCase();
+  const safeId = encodeURIComponent(String(userKey || "anonymous").trim().toLowerCase());
+  const safeExp = encodeURIComponent(String(expId || "newton").trim().toLowerCase());
+  return `touchless_physics_report_${safeId}_${safeExp}`;
+}
+
+/**
+ * Persist an immutable experiment report snapshot for the designated user.
+ */
+export function saveExperimentReportSnapshot(expId, snapshot, userIdentifier = null) {
+  if (!expId || !snapshot) return null;
+  const storageKey = getReportStorageKey(expId, userIdentifier);
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(snapshot));
+    return snapshot;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Retrieve the saved experiment report snapshot for the designated user and experiment.
+ */
+export function getExperimentReportSnapshot(expId, userIdentifier = null) {
+  if (!expId) return null;
+  const storageKey = getReportStorageKey(expId, userIdentifier);
+  try {
+    const raw = localStorage.getItem(storageKey);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}

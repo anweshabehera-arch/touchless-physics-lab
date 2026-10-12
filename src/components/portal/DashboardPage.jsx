@@ -23,9 +23,10 @@ import {
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { clearSession, getDisplayName, getInitials, getSession } from "../../auth/authStorage";
-import { getExperimentStats } from "../../auth/experimentStorage";
+import { getExperimentStats, getExperimentReportSnapshot } from "../../auth/experimentStorage";
 import { getQuestProfile, QUEST_ACHIEVEMENTS } from "../../auth/questStorage";
 import { EXPERIMENT_LIST } from "../../data/experimentsData";
+import { createExperimentReportSnapshot } from "../../physics/reportGenerator";
 import LabBackground, { OrbitGlow } from "./LabBackground";
 import Logo from "./Logo";
 import ProjectIntroModal from "./ProjectIntroModal";
@@ -123,107 +124,39 @@ export default function DashboardPage() {
   // Dynamic statistics derived strictly from current user's isolated records
   const stats = getExperimentStats(userKey);
 
-  const getExperimentSamples = (expId) => {
-    switch (expId) {
-      case 'newton':
-        return [
-          { parameter: "Applied Net Force (F)", value: "3.50 N", theoretical: "3.50 N", deviation: "0.0%" },
-          { parameter: "Inertial Mass (m)", value: "1.00 kg", theoretical: "1.00 kg", deviation: "0.0%" },
-          { parameter: "Measured Acceleration (a)", value: "3.50 m/s²", theoretical: "3.50 m/s²", deviation: "0.0%" },
-          { parameter: "System Momentum (p)", value: "3.50 kg·m/s", theoretical: "3.50 kg·m/s", deviation: "0.0%" }
-        ];
-      case 'impulse':
-        return [
-          { parameter: "Average Force (F_avg)", value: "5.00 N", theoretical: "5.00 N", deviation: "0.0%" },
-          { parameter: "Impact Duration (Δt)", value: "0.40 s", theoretical: "0.40 s", deviation: "0.0%" },
-          { parameter: "Impulse (J = F·Δt)", value: "2.00 N·s", theoretical: "2.00 N·s", deviation: "0.0%" },
-          { parameter: "Momentum Change (Δp)", value: "2.00 kg·m/s", theoretical: "2.00 kg·m/s", deviation: "0.0%" }
-        ];
-      case 'hooke':
-        return [
-          { parameter: "Spring Constant (k)", value: "25.0 N/m", theoretical: "25.0 N/m", deviation: "0.0%" },
-          { parameter: "Displacement (Δx)", value: "0.12 m", theoretical: "0.12 m", deviation: "0.0%" },
-          { parameter: "Restoring Force (-k·x)", value: "-3.00 N", theoretical: "-3.00 N", deviation: "0.0%" },
-          { parameter: "Elastic Potential (U_s)", value: "0.180 J", theoretical: "0.180 J", deviation: "0.0%" }
-        ];
-      case 'collision':
-        return [
-          { parameter: "Cart 1 Initial Momentum", value: "2.00 kg·m/s", theoretical: "2.00 kg·m/s", deviation: "0.0%" },
-          { parameter: "Cart 2 Initial Momentum", value: "0.00 kg·m/s", theoretical: "0.00 kg·m/s", deviation: "0.0%" },
-          { parameter: "Total Initial Momentum", value: "2.00 kg·m/s", theoretical: "2.00 kg·m/s", deviation: "0.0%" },
-          { parameter: "Total Final Momentum", value: "2.00 kg·m/s", theoretical: "2.00 kg·m/s", deviation: "0.0%" }
-        ];
-      case 'projectile':
-        return [
-          { parameter: "Launch Velocity (v₀)", value: "12.0 m/s", theoretical: "12.0 m/s", deviation: "0.0%" },
-          { parameter: "Launch Angle (θ)", value: "45.0°", theoretical: "45.0°", deviation: "0.0%" },
-          { parameter: "Horizontal Range (R)", value: "14.69 m", theoretical: "14.69 m", deviation: "0.0%" },
-          { parameter: "Apex Height (H_max)", value: "3.67 m", theoretical: "3.67 m", deviation: "0.0%" }
-        ];
-      case 'pendulum':
-        return [
-          { parameter: "Suspension Length (L)", value: "1.00 m", theoretical: "1.00 m", deviation: "0.0%" },
-          { parameter: "Bob Mass (m)", value: "0.50 kg", theoretical: "0.50 kg", deviation: "0.0%" },
-          { parameter: "Initial Angle (θ₀)", value: "15.0°", theoretical: "15.0°", deviation: "0.0%" },
-          { parameter: "Small-Angle Period (T)", value: "2.007 s", theoretical: "2.007 s", deviation: "0.0%" }
-        ];
-      case 'electric':
-        return [
-          { parameter: "Source Charge q₁", value: "+3.00 μC", theoretical: "+3.00 μC", deviation: "0.0%" },
-          { parameter: "Source Charge q₂", value: "-3.00 μC", theoretical: "-3.00 μC", deviation: "0.0%" },
-          { parameter: "Probe Distance (r)", value: "0.50 m", theoretical: "0.50 m", deviation: "0.0%" },
-          { parameter: "Net Field Strength (|E|)", value: "1.08×10⁵ N/C", theoretical: "1.08×10⁵ N/C", deviation: "0.0%" }
-        ];
-      case 'wave':
-        return [
-          { parameter: "Wave 1 Amplitude (A₁)", value: "1.50 m", theoretical: "1.50 m", deviation: "0.0%" },
-          { parameter: "Wave 2 Amplitude (A₂)", value: "1.50 m", theoretical: "1.50 m", deviation: "0.0%" },
-          { parameter: "Phase Difference (Δφ)", value: "0.00 rad", theoretical: "0.00 rad", deviation: "0.0%" },
-          { parameter: "Superposition Peak (A_res)", value: "3.00 m", theoretical: "3.00 m", deviation: "0.0%" }
-        ];
-      case 'optics':
-        return [
-          { parameter: "Incident Angle (θ₁)", value: "30.0°", theoretical: "30.0°", deviation: "0.0%" },
-          { parameter: "Reflected Angle (θ_r)", value: "30.0°", theoretical: "30.0°", deviation: "0.0%" },
-          { parameter: "Refractive Indices (n₁ / n₂)", value: "1.000 / 1.500", theoretical: "1.000 / 1.500", deviation: "0.0%" },
-          { parameter: "Refracted Angle (θ₂)", value: "19.47°", theoretical: "19.47°", deviation: "0.0%" }
-        ];
-      case 'incline':
-        return [
-          { parameter: "Inclination Angle (θ)", value: "30.0°", theoretical: "30.0°", deviation: "0.0%" },
-          { parameter: "Block Mass (m)", value: "2.00 kg", theoretical: "2.00 kg", deviation: "0.0%" },
-          { parameter: "Static Threshold (tan θ vs μ_s)", value: "0.577 > 0.400", theoretical: "Slipping", deviation: "0.0%" },
-          { parameter: "Downslope Accel (a_net)", value: "2.36 m/s²", theoretical: "2.36 m/s²", deviation: "0.0%" }
-        ];
-      default:
-        return [
-          { parameter: "Applied Input", value: "1.00", theoretical: "1.00", deviation: "0.0%" }
-        ];
-    }
-  };
-
   const openReportForExp = (expId, record = null) => {
-    const expConfig = EXPERIMENT_LIST.find((e) => e.id === expId) || EXPERIMENT_LIST[0];
-    const rec = record || stats.history.find((h) => (h.experimentId === expId || h.id === expId));
+    const targetExpId = expId || 'newton';
+    const expConfig = EXPERIMENT_LIST.find((e) => e.id === targetExpId) || EXPERIMENT_LIST[0];
+    const rec = record || stats.history.find((h) => (h.experimentId === targetExpId || h.id === targetExpId));
     const scoreVal = rec?.score !== undefined ? rec.score : null;
-    
-    setActiveReportData({
+
+    // 1. Check if user has a real saved experiment report snapshot for this lab
+    const savedSnapshot = getExperimentReportSnapshot(expConfig.id, userKey);
+    if (savedSnapshot) {
+      if (scoreVal !== null) {
+        savedSnapshot.mastery.score = scoreVal;
+        savedSnapshot.mastery.isMastered = scoreVal >= 70;
+        savedSnapshot.mastery.statusText = scoreVal >= 70 ? 'MASTERED' : 'NEEDS REVIEW';
+        if (savedSnapshot.hasMeasurements) {
+          savedSnapshot.badge.title = scoreVal >= 70 ? 'LAB VERIFIED & MASTERED' : 'EVALUATED (REVIEW RECOMMENDED)';
+          savedSnapshot.badge.subtitle = `SCORE: ${scoreVal}%`;
+          savedSnapshot.badge.type = scoreVal >= 70 ? 'verified' : 'evaluated';
+        }
+      }
+      setActiveReportData(savedSnapshot);
+      return;
+    }
+
+    // 2. Otherwise generate a dedicated snapshot for this experiment (awaiting empirical telemetry)
+    const snapshot = createExperimentReportSnapshot({
       experimentId: expConfig.id,
-      experimentTitle: expConfig.title,
-      userName: firstName || "Student Investigator",
-      userEmail: session?.email || "anonymous@lab.local",
-      score: scoreVal,
-      totalQuestions: 4,
-      date: rec?.date || new Date().toISOString(),
-      formula: expConfig.primaryFormula,
-      objective: expConfig.objective,
-      prerequisites: expConfig.prerequisites,
-      assumptions: expConfig.assumptions,
-      samples: getExperimentSamples(expConfig.id),
-      aiNotes: scoreVal !== null
-        ? `Empirical laboratory observations confirm ${expConfig.primaryFormula}. Investigator completed laboratory verification with an assessment score of ${scoreVal}%.`
-        : `Empirical laboratory session recorded for ${expConfig.title}. Formal quiz assessment is currently pending.`
+      experiment: expConfig,
+      quizResult: scoreVal !== null ? { score: scoreVal } : null,
+      studentName: firstName || "Student Investigator",
+      hasMeasurements: false
     });
+
+    setActiveReportData(snapshot);
   };
 
   const questProfile = getQuestProfile(userKey);
@@ -656,7 +589,7 @@ export default function DashboardPage() {
                           gap: '6px',
                           whiteSpace: 'nowrap'
                         }}
-                        onClick={() => openReportForExp(exp.experimentId || 'newton', exp)}
+                        onClick={() => openReportForExp(exp.experimentId || exp.id || 'newton', exp)}
                         title="View & Print Official Lab Report"
                       >
                         <FileText className="tpl-icon-xs" />
@@ -700,7 +633,7 @@ export default function DashboardPage() {
       {/* Official Lab Report Modal */}
       {activeReportData && (
         <LabReportModal
-          reportData={activeReportData}
+          reportSnapshot={activeReportData}
           onClose={() => setActiveReportData(null)}
         />
       )}
