@@ -103,6 +103,9 @@ export default function LivePhysicsHUD({
   onChangeInclineMuKinetic
 }) {
   const [activeTab, setActiveTab] = useState('telemetry'); // 'telemetry' | 'graph'
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(() => {
+    return typeof window !== 'undefined' && window.innerWidth < 768;
+  });
 
   const {
     force = 0,
@@ -164,12 +167,26 @@ export default function LivePhysicsHUD({
   } = physicsData || {};
 
   return (
-    <div className="live-physics-panel" aria-label="Live Physics Panel">
+    <div className={`live-physics-panel ${isPanelCollapsed ? 'collapsed' : ''}`} aria-label="Live Physics Panel">
       {/* Title & Tab Switcher */}
       <div className="panel-title-badge">
-        <span className="hud-title">⚡ LIVE PHYSICS DASHBOARD</span>
-        <span className="live-indicator-dot" title="Live Simulation Telemetry Active" />
+        <div className="title-left-group">
+          <span className="hud-title">⚡ LIVE PHYSICS DASHBOARD</span>
+          <span className="live-indicator-dot" title="Live Simulation Telemetry Active" />
+        </div>
+        <button
+          type="button"
+          className="btn-hud-toggle"
+          onClick={() => setIsPanelCollapsed((c) => !c)}
+          title={isPanelCollapsed ? "Expand live physics dashboard" : "Minimize dashboard"}
+          aria-label={isPanelCollapsed ? "Expand live physics dashboard" : "Minimize dashboard"}
+        >
+          {isPanelCollapsed ? "▲ Expand" : "▼ Minimize"}
+        </button>
       </div>
+
+      {!isPanelCollapsed && (
+        <>
 
       <div className="hud-tab-bar">
         <button
@@ -1453,6 +1470,8 @@ export default function LivePhysicsHUD({
           </button>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

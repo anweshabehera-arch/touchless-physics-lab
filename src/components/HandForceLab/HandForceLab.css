@@ -4,17 +4,14 @@
 
 /* ---------- LIVE PHYSICS HUD (LEFT / TOP-LEFT) ---------- */
 .live-physics-panel {
-  position: absolute;
-  top: 90px;
-  right: 28px;
-  width: 250px;
-  max-height: calc(100vh - 90px - 265px - 25px);
+  width: 100%;
+  max-height: 52vh;
   overflow-y: auto;
   overflow-x: hidden;
   box-sizing: border-box;
   z-index: 30;
 
-  padding: 16px;
+  padding: 14px;
   border-radius: 16px;
   background: linear-gradient(150deg, rgba(4, 20, 36, 0.88), rgba(2, 10, 20, 0.82));
   border: 1px solid rgba(56, 217, 255, 0.25);
@@ -25,6 +22,13 @@
   pointer-events: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(56, 217, 255, 0.3) transparent;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.live-physics-panel.collapsed {
+  max-height: 48px;
+  padding: 8px 12px;
+  overflow: hidden;
 }
 
 .live-physics-panel::-webkit-scrollbar {
@@ -45,7 +49,38 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   margin-bottom: 10px;
+}
+
+.live-physics-panel.collapsed .panel-title-badge {
+  margin-bottom: 0;
+}
+
+.title-left-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-hud-toggle {
+  background: rgba(56, 217, 255, 0.08);
+  border: 1px solid rgba(56, 217, 255, 0.25);
+  border-radius: 6px;
+  color: #8fe8ff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  pointer-events: auto;
+  white-space: nowrap;
+}
+
+.btn-hud-toggle:hover {
+  background: rgba(56, 217, 255, 0.2);
+  color: #ffffff;
+  border-color: #38d9ff;
 }
 
 .hud-title {
@@ -209,25 +244,27 @@
 
 /* ---------- PHYSICS ACTION CHAIN (TOP CENTER) ---------- */
 .physics-action-chain {
-  position: absolute;
-  top: 75px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 30;
-
   display: flex;
   align-items: center;
   gap: 6px;
 
-  padding: 8px 14px;
-  border-radius: 20px;
-  background: rgba(3, 16, 28, 0.85);
+  padding: 6px 12px;
+  border-radius: 18px;
+  background: rgba(3, 16, 28, 0.88);
   border: 1px solid rgba(56, 217, 255, 0.25);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 
-  pointer-events: none;
+  max-width: min(92vw, 680px);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  pointer-events: auto;
+}
+
+.physics-action-chain::-webkit-scrollbar {
+  display: none;
 }
 
 .chain-node {
@@ -279,33 +316,28 @@
 
 /* ---------- REAL-TIME EXPLANATION BANNER ---------- */
 .realtime-explanation-bar {
-  position: absolute;
-  top: 128px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 30;
-
   display: flex;
   align-items: center;
   gap: 10px;
 
-  max-width: 600px;
-  width: calc(100vw - 600px);
-  padding: 8px 16px;
+  max-width: min(90vw, 560px);
+  width: auto;
+  padding: 6px 14px;
   border-radius: 12px;
 
-  background: linear-gradient(90deg, rgba(3, 17, 30, 0.9), rgba(5, 25, 45, 0.85));
+  background: linear-gradient(90deg, rgba(3, 17, 30, 0.92), rgba(5, 25, 45, 0.88));
   border: 1px solid rgba(56, 217, 255, 0.25);
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 
-  pointer-events: none;
+  pointer-events: auto;
   animation: fadeInText 0.3s;
 }
 
 .explanation-icon {
   font-size: 14px;
+  flex-shrink: 0;
 }
 
 .explanation-text {
@@ -315,9 +347,7 @@
   color: #dcf5ff;
   letter-spacing: 0.5px;
   line-height: 1.4;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
 }
 
 .explanation-formula-tag {
@@ -335,10 +365,10 @@
 /* ---------- BOTTOM TOGGLE CONTROLS BAR ---------- */
 .experiment-controls-bar {
   position: absolute;
-  bottom: 22px;
+  bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 30;
+  z-index: 35;
 
   display: flex;
   align-items: center;
@@ -353,6 +383,15 @@
   -webkit-backdrop-filter: blur(14px);
 
   pointer-events: auto;
+  max-width: calc(100vw - 28px);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  white-space: nowrap;
+}
+
+.experiment-controls-bar::-webkit-scrollbar {
+  display: none;
 }
 
 .toggle-chip {
@@ -371,6 +410,7 @@
   cursor: pointer;
   transition: all 0.2s;
   user-select: none;
+  flex-shrink: 0;
 }
 
 .toggle-chip:hover {
@@ -393,13 +433,12 @@
 
 /* ---------- GESTURES HUD (LEFT) ---------- */
 .gesture-hud-panel {
-  position: absolute;
-  top: 90px;
-  left: 28px;
-  width: 215px;
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
   z-index: 30;
 
-  padding: 16px;
+  padding: 14px;
   border-radius: 16px;
   background: linear-gradient(150deg, rgba(4, 20, 36, 0.88), rgba(2, 10, 20, 0.82));
   border: 1px solid rgba(56, 217, 255, 0.22);
@@ -462,10 +501,9 @@
 
 /* ---------- LEARN PANEL (COLLAPSIBLE / MODAL) ---------- */
 .learn-panel-container {
-  position: absolute;
-  bottom: 75px;
-  left: 28px;
-  width: 250px;
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
   z-index: 30;
 
   padding: 14px;
@@ -531,10 +569,8 @@
 
 /* ---------- PHYSICS EVENT TIMELINE PANEL ---------- */
 .event-timeline-panel {
-  position: absolute;
-  bottom: 75px;
-  right: 28px;
-  width: 250px;
+  position: relative;
+  width: 100%;
   max-height: 255px;
   z-index: 30;
 
@@ -717,74 +753,336 @@
   color: #fff;
 }
 
-/* ---------- RESPONSIVE MEDIA QUERIES ---------- */
-@media (max-width: 1200px) {
+/* =========================================================
+   RESPONSIVE WORKSPACE LAYOUT & ZONES
+   ========================================================= */
+.lab-top-nav-zone {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 14px 4px 14px;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.lab-top-nav-zone > * {
+  pointer-events: auto;
+}
+
+.lab-center-guidance {
+  position: absolute;
+  top: calc(var(--top-nav-height, 120px) + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 24;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  max-width: min(94vw, 760px);
+  pointer-events: none;
+  transition: top 0.2s ease;
+}
+
+.lab-center-guidance > * {
+  pointer-events: auto;
+}
+
+.lab-workspace-left {
+  position: absolute;
+  top: calc(var(--top-nav-height, 120px) + 10px);
+  left: 16px;
+  bottom: 68px;
+  width: clamp(260px, 24vw, 380px);
+  max-width: calc(100vw - 32px);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56, 217, 255, 0.25) transparent;
+  transition: top 0.2s ease;
+}
+
+.lab-workspace-left::-webkit-scrollbar {
+  width: 4px;
+}
+.lab-workspace-left::-webkit-scrollbar-thumb {
+  background: rgba(56, 217, 255, 0.25);
+  border-radius: 4px;
+}
+
+.lab-workspace-left > * {
+  pointer-events: auto;
+  flex-shrink: 0;
+}
+
+.lab-workspace-right {
+  position: absolute;
+  top: calc(var(--top-nav-height, 120px) + 10px);
+  right: 16px;
+  bottom: 68px;
+  width: clamp(240px, 22vw, 300px);
+  max-width: calc(100vw - 32px);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56, 217, 255, 0.25) transparent;
+  transition: top 0.2s ease;
+}
+
+.lab-workspace-right::-webkit-scrollbar {
+  width: 4px;
+}
+.lab-workspace-right::-webkit-scrollbar-thumb {
+  background: rgba(56, 217, 255, 0.25);
+  border-radius: 4px;
+}
+
+.lab-workspace-right > * {
+  pointer-events: auto;
+  flex-shrink: 0;
+}
+
+.brand-titles {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.lab-header-status-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.gesture-items-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+/* =========================================================
+   RESPONSIVE BREAKPOINTS (Desktop, Laptop, Tablet, Mobile)
+   ========================================================= */
+
+/* Desktop: 1440px and above */
+@media (min-width: 1440px) {
+  .lab-workspace-left {
+    width: 320px;
+    left: 20px;
+  }
+  .lab-workspace-right {
+    width: 275px;
+    right: 20px;
+  }
+  .lab-center-guidance {
+    max-width: 760px;
+  }
+}
+
+/* Laptop: 1024px – 1439px */
+@media (max-width: 1439px) and (min-width: 1024px) {
+  .lab-workspace-left {
+    width: 270px;
+    left: 14px;
+  }
+  .lab-workspace-right {
+    width: 250px;
+    right: 14px;
+  }
   .realtime-explanation-bar {
-    width: auto;
     max-width: 480px;
-  }
-  .live-physics-panel {
-    top: 80px;
-    right: 20px;
-    width: 235px;
-    max-height: calc(100vh - 80px - 250px - 20px);
-  }
-  .event-timeline-panel {
-    right: 20px;
-    bottom: 65px;
-    width: 235px;
-    max-height: 240px;
   }
   .events-list {
     max-height: 120px;
   }
 }
 
-@media (max-width: 900px) {
-  .realtime-explanation-bar {
-    display: none;
+/* Tablet: 768px – 1023px */
+@media (max-width: 1023px) and (min-width: 768px) {
+  .lab-top-nav-zone {
+    padding: 6px 10px 4px 10px;
   }
-  .learn-panel-container {
-    display: none;
+  .lab-header {
+    gap: 8px 10px;
   }
-  .live-physics-panel {
-    top: 75px;
-    right: 14px;
-    width: 210px;
-    max-height: calc(100vh - 75px - 225px - 15px);
-    padding: 12px;
+  .lab-workspace-left {
+    width: 240px;
+    left: 10px;
   }
-  .event-timeline-panel {
-    right: 14px;
-    bottom: 65px;
-    width: 210px;
-    max-height: 215px;
-    padding: 10px 12px 8px 12px;
-  }
-  .events-list {
-    max-height: 100px;
+  .lab-workspace-right {
+    width: 230px;
+    right: 10px;
   }
   .gesture-hud-panel {
-    top: 75px;
-    left: 14px;
-    width: 180px;
+    padding: 12px;
+  }
+  .gesture-item-row {
+    padding: 6px 8px;
+    gap: 8px;
+  }
+  .learn-panel-container {
+    padding: 10px;
+  }
+  .realtime-explanation-bar {
+    max-width: min(88vw, 420px);
+    font-size: 10px;
+    padding: 5px 10px;
   }
   .physics-action-chain {
-    display: none;
+    max-width: min(88vw, 520px);
+  }
+  .events-list {
+    max-height: 105px;
   }
 }
 
-@media (max-height: 740px) {
+/* Mobile: 320px – 767px */
+@media (max-width: 767px) {
+  .lab-top-nav-zone {
+    padding: 4px 8px 2px 8px;
+    gap: 4px;
+  }
+  .lab-header {
+    padding: 6px 8px;
+    gap: 6px 8px;
+  }
+  .brand-icon {
+    width: 30px;
+    height: 30px;
+    font-size: 16px;
+  }
+  .brand-title {
+    font-size: 12px;
+    letter-spacing: 1px;
+  }
+  .brand-subtitle {
+    font-size: 7px;
+    letter-spacing: 1px;
+  }
+  .lab-exp-selector-wrap {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-width: 100%;
+    padding-bottom: 3px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(56, 217, 255, 0.3) transparent;
+  }
+  .lab-exp-selector-wrap::-webkit-scrollbar {
+    height: 3px;
+  }
+  .lab-exp-selector-wrap::-webkit-scrollbar-thumb {
+    background: rgba(56, 217, 255, 0.3);
+    border-radius: 3px;
+  }
+  .quest-mode-bar {
+    padding: 4px 8px;
+    gap: 6px;
+  }
+  .quest-tabs-group {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-width: 100%;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .quest-tabs-group::-webkit-scrollbar {
+    display: none;
+  }
+  .quest-career-pill {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .lab-workspace-left {
+    left: 8px;
+    width: min(220px, calc(50vw - 12px));
+    bottom: 60px;
+    gap: 8px;
+  }
+  .lab-workspace-right {
+    right: 8px;
+    width: min(210px, calc(50vw - 12px));
+    bottom: 60px;
+    gap: 8px;
+  }
+  .gesture-hud-panel {
+    padding: 8px 10px;
+    border-radius: 12px;
+  }
+  .gesture-item-row {
+    padding: 4px 6px;
+    margin-bottom: 4px;
+    gap: 6px;
+  }
+  .gesture-symbol {
+    font-size: 13px;
+  }
+  .gesture-text strong {
+    font-size: 9px;
+  }
+  .gesture-text small {
+    display: none;
+  }
+  .learn-panel-container {
+    padding: 8px 10px;
+    border-radius: 12px;
+  }
   .live-physics-panel {
-    top: 75px;
-    max-height: calc(100vh - 75px - 215px - 15px);
+    padding: 8px 10px;
+    border-radius: 12px;
   }
   .event-timeline-panel {
-    bottom: 60px;
-    max-height: 205px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    max-height: 180px;
   }
   .events-list {
-    max-height: 90px;
+    max-height: 80px;
+  }
+  .experiment-controls-bar {
+    bottom: 8px;
+    padding: 4px 8px;
+    gap: 5px;
+    max-width: calc(100vw - 16px);
+  }
+  .toggle-chip {
+    padding: 4px 8px;
+    font-size: 9px;
+    gap: 4px;
+  }
+  .guided-mode-panel,
+  .quest-mission-panel,
+  .quest-prediction-panel {
+    position: fixed;
+    top: calc(var(--top-nav-height, 120px) + 4px);
+    left: 8px;
+    right: 8px;
+    width: auto;
+    max-width: calc(100vw - 16px);
+    max-height: calc(100vh - var(--top-nav-height, 120px) - 68px);
+    z-index: 50;
+    padding: 12px;
+  }
+  .quiz-modal-card,
+  .how-modal-card {
+    padding: 16px;
+    max-height: 94vh;
   }
 }
 
@@ -1337,8 +1635,10 @@
 .lab-exp-selector-wrap {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px 8px;
   pointer-events: auto;
+  max-width: 100%;
 }
 
 .lab-header button,
@@ -1347,16 +1647,25 @@
   pointer-events: auto;
 }
 
+.lab-exp-label {
+  color: #7997a8;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  white-space: nowrap;
+}
+
 .lab-exp-select {
   background: rgba(4, 20, 36, 0.9);
   border: 1px solid rgba(56, 217, 255, 0.3);
   color: #e9f8ff;
   border-radius: 8px;
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   cursor: pointer;
   outline: none;
+  max-width: 100%;
 }
 
 .lab-exp-select:focus {
@@ -1368,7 +1677,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 6px 11px;
   border-radius: 8px;
   background: rgba(56, 217, 255, 0.08);
   border: 1px solid rgba(56, 217, 255, 0.25);
@@ -1378,6 +1687,9 @@
   cursor: pointer;
   transition: all 0.2s;
   text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+  user-select: none;
 }
 
 .lab-top-action-btn:hover {
@@ -1564,11 +1876,10 @@
    GUIDED LAB MODE PANEL
    ========================================================= */
 .guided-mode-panel {
-  position: absolute;
-  top: 90px;
-  left: 28px;
-  width: 380px;
-  max-width: calc(100vw - 56px);
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   z-index: 35;
   padding: 16px 18px;
   border-radius: 16px;
@@ -2441,14 +2752,14 @@
 
 /* ---------- 1. QUEST MODE SWITCHER BAR ---------- */
 .quest-mode-bar {
-  position: absolute;
-  top: 72px;
-  left: 24px;
-  right: 280px;
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   padding: 6px 14px;
   border-radius: 12px;
   background: linear-gradient(135deg, rgba(6, 24, 44, 0.92), rgba(3, 14, 28, 0.9));
@@ -2638,11 +2949,10 @@
 
 /* ---------- 2. QUEST MISSION PANEL ---------- */
 .quest-mission-panel {
-  position: absolute;
-  top: 122px;
-  left: 24px;
-  width: 440px;
-  max-height: calc(100vh - 145px);
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  max-height: calc(100vh - var(--top-nav-height, 120px) - 100px);
   overflow-y: auto;
   border-radius: 16px;
   background: linear-gradient(150deg, rgba(6, 24, 44, 0.94), rgba(2, 12, 24, 0.9));
@@ -3051,11 +3361,10 @@
 
 /* ---------- 3. QUEST PREDICTION PANEL ---------- */
 .quest-prediction-panel {
-  position: absolute;
-  top: 122px;
-  left: 24px;
-  width: 440px;
-  max-height: calc(100vh - 145px);
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  max-height: calc(100vh - var(--top-nav-height, 120px) - 100px);
   overflow-y: auto;
   border-radius: 16px;
   background: linear-gradient(150deg, rgba(8, 22, 44, 0.95), rgba(3, 11, 22, 0.92));

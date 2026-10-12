@@ -74,7 +74,9 @@ const EXPERIMENT_DEFINITIONS = {
 };
 
 export default function LearnPanel({ activeExperimentId = 'newton' }) {
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(() => {
+    return typeof window !== 'undefined' ? window.innerWidth >= 1200 : true;
+  });
 
   const definitions = EXPERIMENT_DEFINITIONS[activeExperimentId] || EXPERIMENT_DEFINITIONS.newton;
 

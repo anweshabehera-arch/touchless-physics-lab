@@ -88,6 +88,23 @@ export default function App() {
   });
   const [lastQuizResult, setLastQuizResult] = useState(null);
 
+  // Top nav height measurement for responsive workspace layout
+  const topNavRef = useRef(null);
+  const [topNavHeight, setTopNavHeight] = useState(115);
+
+  useEffect(() => {
+    if (!topNavRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect) {
+          setTopNavHeight(Math.ceil(entry.contentRect.height));
+        }
+      }
+    });
+    observer.observe(topNavRef.current);
+    return () => observer.disconnect();
+  }, []);
+
   // Camera & Tracking State
   const [cameraEnabled, setCameraEnabled] = useState(true);
   const [cameraStatus, setCameraStatus] = useState("active"); // 'active' | 'lost' | 'disabled' | 'denied'
@@ -3535,7 +3552,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="physics-lab">
+    <div className="physics-lab" style={{ '--top-nav-height': `${topNavHeight + 12}px` }}>
       {/* 1. CAMERA FEED */}
       <video
         ref={videoRef}
@@ -3554,229 +3571,323 @@ export default function App() {
       {/* 3. THREE.JS CANVAS */}
       <canvas ref={canvasRef} className="particle-canvas" />
 
-      {/* 4. LAB HEADER WITH EXPERIMENT SELECTOR & NAV */}
-      <header className="lab-header">
-        <div className="brand">
-          <Link
-            to="/dashboard"
-            className="lab-top-action-btn"
-            title="Back to Dashboard"
-          >
-            <ArrowLeft className="btn-icon-sm" />
-            Dashboard
-          </Link>
+      {/* 4. TOP NAVIGATION & MISSION GUIDANCE ZONE */}
+      <div ref={topNavRef} className="lab-top-nav-zone">
+        <header className="lab-header">
+          <div className="brand">
+            <Link
+              to="/dashboard"
+              className="lab-top-action-btn"
+              title="Back to Dashboard"
+            >
+              <ArrowLeft className="btn-icon-sm" />
+              <span>Dashboard</span>
+            </Link>
 
-          <div className="brand-icon">⚛</div>
-          <div>
-            <div className="brand-title">TOUCHLESS PHYSICS LAB</div>
-            <div className="brand-subtitle">
-              {activeExperiment.title.toUpperCase()} <span>•</span> REAL-TIME MECHANICS
+            <div className="brand-icon">⚛</div>
+            <div className="brand-titles">
+              <div className="brand-title">TOUCHLESS PHYSICS LAB</div>
+              <div className="brand-subtitle">
+                {activeExperiment.title.toUpperCase()} <span>•</span> REAL-TIME MECHANICS
+              </div>
+            </div>
+          </div>
+
+          {/* Experiment Switcher Dropdown & Action Buttons */}
+          <div className="lab-exp-selector-wrap" role="toolbar" aria-label="Lab Navigation and Actions">
+            <label
+              htmlFor="exp-select-header"
+              className="lab-exp-label"
+            >
+              LAB MODULE:
+            </label>
+            <select
+              id="exp-select-header"
+              className="lab-exp-select"
+              value={activeExpId}
+              onChange={(e) => handleSelectExperiment(e.target.value)}
+              aria-label="Select Lab Module"
+            >
+              {EXPERIMENT_LIST.map((exp) => (
+                <option key={exp.id} value={exp.id}>
+                  {exp.emoji} {exp.title}
+                </option>
+              ))}
+            </select>
+
+            {/* Guided Mode Toggle */}
+            <button
+              type="button"
+              className={`lab-top-action-btn ${isGuidedModeOpen ? "active-quiz" : ""}`}
+              onClick={() => setIsGuidedModeOpen((g) => !g)}
+              title="Toggle step-by-step guided experiment mode"
+            >
+              <Compass className="btn-icon-sm" />
+              <span>{isGuidedModeOpen ? "Guided Mode (Active)" : "Guided Mode"}</span>
+            </button>
+
+            {/* How to Perform Modal */}
+            <button
+              type="button"
+              className="lab-top-action-btn"
+              onClick={() => setIsHowToOpen(true)}
+              title="Read how to perform gestures for this lab"
+            >
+              <BookOpen className="btn-icon-sm" />
+              <span>How to Perform</span>
+            </button>
+
+            {/* Quiz Button */}
+            <button
+              type="button"
+              className={`lab-top-action-btn ${quizScoreBadge !== null ? "active-quiz" : ""}`}
+              onClick={() => setIsQuizOpen(true)}
+              title="Take experiment mastery quiz"
+            >
+              <Award className="btn-icon-sm" />
+              <span>{quizScoreBadge !== null ? `Quiz (${quizScoreBadge}%)` : "Take Quiz"}</span>
+            </button>
+
+            {/* Lab Report Button */}
+            <button
+              type="button"
+              className="lab-top-action-btn"
+              onClick={() => setIsReportOpen(true)}
+              title="View & Print Official Physics Lab Report"
+            >
+              <FileText className="btn-icon-sm" />
+              <span>Lab Report</span>
+            </button>
+
+            {/* Hackathon Tour / Info */}
+            <button
+              type="button"
+              className="lab-top-action-btn"
+              onClick={() => setIsIntroOpen(true)}
+              title="Platform Overview & Demo Walkthrough"
+            >
+              <Info className="btn-icon-sm" />
+              <span>About</span>
+            </button>
+          </div>
+
+          {/* Camera Toggle & Status Indicator */}
+          <div className="lab-header-status-group">
+            <button
+              type="button"
+              className="lab-top-action-btn"
+              onClick={() => setCameraEnabled((c) => !c)}
+              title={cameraEnabled ? "Disable webcam (use mouse mode)" : "Enable webcam"}
+            >
+              {cameraEnabled ? (
+                <Camera className="btn-icon-sm" />
+              ) : (
+                <CameraOff className="btn-icon-sm" />
+              )}
+              <span>{cameraEnabled ? "Cam: ON" : "Cam: OFF"}</span>
+            </button>
+
+            <div className={`tracking-status ${cameraStatus}`}>
+              <span className="status-dot" />
+              <span className="status-text-label">
+                {cameraStatus === "active" && "HAND TRACKING ACTIVE"}
+                {cameraStatus === "lost" && "HAND OUTSIDE FRAME"}
+                {cameraStatus === "disabled" && "MOUSE MODE ACTIVE"}
+                {cameraStatus === "denied" && "CAM BLOCKED (MOUSE ACTIVE)"}
+              </span>
+            </div>
+          </div>
+        </header>
+
+        {/* QUEST MODE SWITCHER & CAREER STATUS BAR */}
+        <QuestModeBar
+          activeMode={questMode}
+          onChangeMode={(mode) => {
+            setQuestMode(mode);
+            if (mode === "learn") {
+              setIsGuidedModeOpen(true);
+            } else {
+              setIsGuidedModeOpen(false);
+            }
+          }}
+          questProfile={questProfile}
+          completedMissionsForExp={
+            (QUEST_MISSIONS[activeExpId] || []).filter((m) =>
+              Boolean(questProfile?.completedMissions?.[m.id])
+            ).length
+          }
+          totalMissionsForExp={3}
+          isPredictionDone={Boolean(
+            questProfile?.completedPredictions?.[
+              QUEST_PREDICTIONS[activeExpId]?.id
+            ]
+          )}
+          onOpenAchievements={() => setIsRanksOpen(true)}
+        />
+      </div>
+
+      {/* CENTER GUIDANCE (Cause-and-effect workflow & Real-time explanation) */}
+      <div className="lab-center-guidance">
+        <PhysicsActionChain
+          chainState={actionChain}
+          activeExperimentId={activeExpId}
+        />
+        <RealTimeExplanation
+          explanation={explanation}
+          formulaTag={formulaTag}
+        />
+      </div>
+
+      {/* LEFT WORKSPACE PANELS (Gestures HUD, Active Quest Panel, Core Concepts) */}
+      <aside className="lab-workspace-left" aria-label="Experiment Missions and Guidance">
+        {/* 5. GESTURES HUD */}
+        <div className="gesture-hud-panel" aria-label="Gestures Detected">
+          <div className="panel-label">DETECTED GESTURE</div>
+
+          <div className="gesture-items-wrap">
+            <div
+              className={`gesture-item-row ${activeGesture === "PINCH" ? "detected" : ""}`}
+            >
+              <div className="gesture-symbol">🤏</div>
+              <div className="gesture-text">
+                <strong>Pinch</strong>
+                <small>Adjust parameters / aim</small>
+              </div>
+              {activeGesture === "PINCH" && (
+                <span className="gesture-active-badge">ACTIVE</span>
+              )}
+            </div>
+
+            <div
+              className={`gesture-item-row ${activeGesture === "MOVE_HAND" ? "detected" : ""}`}
+            >
+              <div className="gesture-symbol">🖐️</div>
+              <div className="gesture-text">
+                <strong>Move Hand / Mouse</strong>
+                <small>Apply push / drag force</small>
+              </div>
+              {activeGesture === "MOVE_HAND" && (
+                <span className="gesture-active-badge">ACTIVE</span>
+              )}
+            </div>
+
+            <div
+              className={`gesture-item-row ${activeGesture === "FAST_MOTION" ? "detected" : ""}`}
+            >
+              <div className="gesture-symbol">💨</div>
+              <div className="gesture-text">
+                <strong>Fast Motion / Flick</strong>
+                <small>High impulse shockwave</small>
+              </div>
+              {activeGesture === "FAST_MOTION" && (
+                <span className="gesture-active-badge">IMPULSE</span>
+              )}
+            </div>
+
+            <div
+              className={`gesture-item-row ${
+                activeGesture === "FIST" ? "detected fist-detected" : ""
+              }`}
+            >
+              <div className="gesture-symbol">✊</div>
+              <div className="gesture-text">
+                <strong>Fist / Spacebar</strong>
+                <small>Freeze / pause physics</small>
+              </div>
+              {activeGesture === "FIST" && (
+                <span
+                  className="gesture-active-badge"
+                  style={{ color: "#ff6b6b" }}
+                >
+                  PAUSED
+                </span>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Experiment Switcher Dropdown & Action Buttons */}
-        <div className="lab-exp-selector-wrap">
-          <label
-            htmlFor="exp-select-header"
-            style={{ fontSize: "10px", color: "#7bb0c8", fontWeight: 700 }}
-          >
-            LAB MODULE:
-          </label>
-          <select
-            id="exp-select-header"
-            className="lab-exp-select"
-            value={activeExpId}
-            onChange={(e) => handleSelectExperiment(e.target.value)}
-          >
-            {EXPERIMENT_LIST.map((exp) => (
-              <option key={exp.id} value={exp.id}>
-                {exp.emoji} {exp.title}
-              </option>
-            ))}
-          </select>
-
-          {/* Guided Mode Toggle */}
-          <button
-            type="button"
-            className={`lab-top-action-btn ${isGuidedModeOpen ? "active-quiz" : ""}`}
-            onClick={() => setIsGuidedModeOpen((g) => !g)}
-            title="Toggle step-by-step guided experiment mode"
-          >
-            <Compass className="btn-icon-sm" />
-            {isGuidedModeOpen ? "Guided Mode (Active)" : "Guided Mode"}
-          </button>
-
-          {/* How to Perform Modal */}
-          <button
-            type="button"
-            className="lab-top-action-btn"
-            onClick={() => setIsHowToOpen(true)}
-            title="Read how to perform gestures for this lab"
-          >
-            <BookOpen className="btn-icon-sm" />
-            How to Perform
-          </button>
-
-          {/* Quiz Button */}
-          <button
-            type="button"
-            className={`lab-top-action-btn ${quizScoreBadge !== null ? "active-quiz" : ""}`}
-            onClick={() => setIsQuizOpen(true)}
-            title="Take experiment mastery quiz"
-          >
-            <Award className="btn-icon-sm" />
-            {quizScoreBadge !== null ? `Quiz (${quizScoreBadge}%)` : "Take Quiz"}
-          </button>
-
-          {/* Lab Report Button */}
-          <button
-            type="button"
-            className="lab-top-action-btn"
-            onClick={() => setIsReportOpen(true)}
-            title="View & Print Official Physics Lab Report"
-          >
-            <FileText className="btn-icon-sm" />
-            Lab Report
-          </button>
-
-          {/* Hackathon Tour / Info */}
-          <button
-            type="button"
-            className="lab-top-action-btn"
-            onClick={() => setIsIntroOpen(true)}
-            title="Platform Overview & Demo Walkthrough"
-          >
-            <Info className="btn-icon-sm" />
-            About
-          </button>
-        </div>
-
-        {/* Camera Toggle & Status Indicator */}
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <button
-            type="button"
-            className="lab-top-action-btn"
-            onClick={() => setCameraEnabled((c) => !c)}
-            title={cameraEnabled ? "Disable webcam (use mouse mode)" : "Enable webcam"}
-          >
-            {cameraEnabled ? (
-              <Camera className="btn-icon-sm" />
-            ) : (
-              <CameraOff className="btn-icon-sm" />
-            )}
-            {cameraEnabled ? "Cam: ON" : "Cam: OFF"}
-          </button>
-
-          <div className={`tracking-status ${cameraStatus}`}>
-            <span className="status-dot" />
-            <span>
-              {cameraStatus === "active" && "HAND TRACKING ACTIVE"}
-              {cameraStatus === "lost" && "HAND OUTSIDE FRAME"}
-              {cameraStatus === "disabled" && "MOUSE MODE ACTIVE"}
-              {cameraStatus === "denied" && "CAM BLOCKED (MOUSE ACTIVE)"}
-            </span>
-          </div>
-        </div>
-      </header>
-
-      {/* QUEST MODE SWITCHER & CAREER STATUS BAR */}
-      <QuestModeBar
-        activeMode={questMode}
-        onChangeMode={(mode) => {
-          setQuestMode(mode);
-          if (mode === "learn") {
-            setIsGuidedModeOpen(true);
-          } else {
-            setIsGuidedModeOpen(false);
-          }
-        }}
-        questProfile={questProfile}
-        completedMissionsForExp={
-          (QUEST_MISSIONS[activeExpId] || []).filter((m) =>
-            Boolean(questProfile?.completedMissions?.[m.id])
-          ).length
-        }
-        totalMissionsForExp={3}
-        isPredictionDone={Boolean(
-          questProfile?.completedPredictions?.[
-            QUEST_PREDICTIONS[activeExpId]?.id
-          ]
+        {/* 6. GUIDED / LEARN MODE PANEL */}
+        {(questMode === "learn" || isGuidedModeOpen) && (
+          <GuidedExperimentPanel
+            experiment={activeExperiment}
+            physicsData={physicsState}
+            onLaunchQuiz={() => setIsQuizOpen(true)}
+            onResetSim={() => simControlsRef.current.resetSim?.(activeExpId)}
+            isPaused={isPaused}
+            onTogglePause={() => {
+              setIsPaused((p) => {
+                const next = !p;
+                simControlsRef.current.setIsPausedRef?.(next);
+                return next;
+              });
+            }}
+            onClose={() => {
+              setIsGuidedModeOpen(false);
+              setQuestMode("freeplay");
+            }}
+          />
         )}
-        onOpenAchievements={() => setIsRanksOpen(true)}
-      />
 
-      {/* 5. GESTURES HUD (LEFT) */}
-      <div className="gesture-hud-panel" aria-label="Gestures Detected">
-        <div className="panel-label">DETECTED GESTURE</div>
+        {/* 6B. MISSION MODE PANEL */}
+        {questMode === "missions" && (
+          <QuestMissionPanel
+            experiment={activeExperiment}
+            missions={QUEST_MISSIONS[activeExpId] || []}
+            telemetry={physicsState}
+            physicsState={physicsState}
+            simState={physicsState}
+            onClaimReward={handleClaimMission}
+            completedMissionsMap={questProfile?.completedMissions || {}}
+            onResetSim={() => simControlsRef.current.resetSim?.(activeExpId)}
+            onClose={() => setQuestMode("freeplay")}
+          />
+        )}
 
-        <div
-          className={`gesture-item-row ${activeGesture === "PINCH" ? "detected" : ""}`}
-        >
-          <div className="gesture-symbol">🤏</div>
-          <div className="gesture-text">
-            <strong>Pinch</strong>
-            <small>Adjust parameters / aim</small>
-          </div>
-          {activeGesture === "PINCH" && (
-            <span className="gesture-active-badge">ACTIVE</span>
-          )}
-        </div>
+        {/* 6C. PREDICTION / HYPOTHESIS PANEL */}
+        {questMode === "prediction" && (
+          <QuestPredictionPanel
+            prediction={QUEST_PREDICTIONS[activeExpId]}
+            experiment={activeExperiment}
+            onRecordPrediction={handleRecordPrediction}
+            completedPrediction={
+              questProfile?.completedPredictions?.[
+                QUEST_PREDICTIONS[activeExpId]?.id
+              ]
+            }
+            onRunExperiment={() => setQuestMode("freeplay")}
+            onClose={() => setQuestMode("freeplay")}
+          />
+        )}
 
-        <div
-          className={`gesture-item-row ${activeGesture === "MOVE_HAND" ? "detected" : ""}`}
-        >
-          <div className="gesture-symbol">🖐️</div>
-          <div className="gesture-text">
-            <strong>Move Hand / Mouse</strong>
-            <small>Apply push / drag force</small>
-          </div>
-          {activeGesture === "MOVE_HAND" && (
-            <span className="gesture-active-badge">ACTIVE</span>
-          )}
-        </div>
+        {/* 10. LEARN PANEL (BOTTOM LEFT) */}
+        <LearnPanel activeExperimentId={activeExpId} />
+      </aside>
 
-        <div
-          className={`gesture-item-row ${activeGesture === "FAST_MOTION" ? "detected" : ""}`}
-        >
-          <div className="gesture-symbol">💨</div>
-          <div className="gesture-text">
-            <strong>Fast Motion / Flick</strong>
-            <small>High impulse shockwave</small>
-          </div>
-          {activeGesture === "FAST_MOTION" && (
-            <span className="gesture-active-badge">IMPULSE</span>
-          )}
-        </div>
-
-        <div
-          className={`gesture-item-row ${
-            activeGesture === "FIST" ? "detected fist-detected" : ""
-          }`}
-        >
-          <div className="gesture-symbol">✊</div>
-          <div className="gesture-text">
-            <strong>Fist / Spacebar</strong>
-            <small>Freeze / pause physics</small>
-          </div>
-          {activeGesture === "FIST" && (
-            <span
-              className="gesture-active-badge"
-              style={{ color: "#ff6b6b" }}
-            >
-              PAUSED
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* 6. GUIDED / LEARN MODE PANEL */}
-      {(questMode === "learn" || isGuidedModeOpen) && (
-        <GuidedExperimentPanel
-          experiment={activeExperiment}
+      {/* RIGHT WORKSPACE PANELS (Live Physics HUD, Event Timeline) */}
+      <aside className="lab-workspace-right" aria-label="Live Physics Dashboard and Telemetry">
+        {/* 9. LIVE PHYSICS HUD WITH TELEMETRY & GRAPH TABS (RIGHT) */}
+        <LivePhysicsHUD
+          activeExperimentId={activeExpId}
+          activeExperiment={activeExperiment}
           physicsData={physicsState}
-          onLaunchQuiz={() => setIsQuizOpen(true)}
-          onResetSim={() => simControlsRef.current.resetSim?.(activeExpId)}
+          mass={mass}
+          onMassChange={setMass}
+          mass2={mass2}
+          onMass2Change={setMass2}
+          springK={springK}
+          onSpringKChange={setSpringK}
+          launchAngle={launchAngle}
+          onLaunchAngleChange={setLaunchAngle}
+          launchSpeed={launchSpeed}
+          onLaunchSpeedChange={setLaunchSpeed}
+          appliedForceManual={appliedForceManual}
+          onAppliedForceManualChange={setAppliedForceManual}
+          collisionType={collisionType}
+          onToggleCollisionType={setCollisionType}
+          onFireProjectile={() => simControlsRef.current.fireProjectile?.()}
+          onTriggerImpact={(f, dt, dir) => simControlsRef.current.triggerImpact?.(f, dt, dir)}
+          onLaunchBall1={() => simControlsRef.current.launchBall1?.()}
+          onResetBall={() => simControlsRef.current.resetSim?.(activeExpId)}
           isPaused={isPaused}
           onTogglePause={() => {
             setIsPaused((p) => {
@@ -3785,172 +3896,90 @@ export default function App() {
               return next;
             });
           }}
-          onClose={() => {
-            setIsGuidedModeOpen(false);
-            setQuestMode("freeplay");
+          onOpenReport={() => setIsReportOpen(true)}
+          // Game 1: Force Arena callbacks
+          onThrustCart={(f) => simControlsRef.current.thrustCart?.(f)}
+          onBrakeCart={(f) => simControlsRef.current.brakeCart?.(f)}
+          onStopCart={() => simControlsRef.current.stopCart?.()}
+          // Game 2: Impulse Rush callbacks & params
+          strikeForce={strikeForce}
+          onStrikeForceChange={setStrikeForce}
+          strikeDuration={strikeDuration}
+          onStrikeDurationChange={setStrikeDuration}
+          strikeDirection={strikeDirection}
+          onStrikeDirectionChange={setStrikeDirection}
+          onSoftLandingTest={() => simControlsRef.current.softLandingTest?.()}
+          onCompareImpulses={() => simControlsRef.current.compareImpulses?.()}
+          // Game 3: Collision Chaos callbacks & params
+          v1Init={v1Init}
+          onV1InitChange={setV1Init}
+          v2Init={v2Init}
+          onV2InitChange={setV2Init}
+          onLaunchCollision={(v1, v2) => simControlsRef.current.launchCollision?.(v1, v2)}
+          onReplayCollision={() => simControlsRef.current.replayCollision?.()}
+          // Experiment 6: Pendulum props
+          pendulumLength={pendulumLength}
+          onChangePendulumLength={setPendulumLength}
+          pendulumAngle={pendulumAngle}
+          onChangePendulumAngle={setPendulumAngle}
+          pendulumMass={pendulumMass}
+          onChangePendulumMass={setPendulumMass}
+          // Experiment 7: Electric props
+          charge1Q={charge1Q}
+          onChangeCharge1Q={setCharge1Q}
+          charge2Q={charge2Q}
+          onChangeCharge2Q={setCharge2Q}
+          chargeTestQ={chargeTestQ}
+          onChangeChargeTestQ={setChargeTestQ}
+          onResetCharges={() => simControlsRef.current.resetCharges?.()}
+          // Experiment 8: Wave props
+          waveA1={waveA1}
+          onChangeWaveA1={setWaveA1}
+          waveA2={waveA2}
+          onChangeWaveA2={setWaveA2}
+          wavePhaseDeg={wavePhaseDeg}
+          onChangeWavePhaseDeg={setWavePhaseDeg}
+          waveFreq={waveFreq}
+          onChangeWaveFreq={setWaveFreq}
+          // Experiment 9: Optics props
+          opticsIncidentAngle={opticsIncidentAngle}
+          onChangeOpticsIncidentAngle={setOpticsIncidentAngle}
+          opticsN1={opticsN1}
+          onChangeOpticsN1={setOpticsN1}
+          opticsN2={opticsN2}
+          onChangeOpticsN2={setOpticsN2}
+          onSwapMedia={() => simControlsRef.current.swapOpticsMedia?.()}
+          // Experiment 10: Incline props
+          inclineAngle={inclineAngle}
+          onChangeInclineAngle={setInclineAngle}
+          inclineMass={inclineMass}
+          onChangeInclineMass={setInclineMass}
+          inclineMuStatic={inclineMuStatic}
+          onChangeInclineMuStatic={setInclineMuStatic}
+          inclineMuKinetic={inclineMuKinetic}
+          onChangeInclineMuKinetic={setInclineMuKinetic}
+          onResetInclineBlock={() => simControlsRef.current.resetInclineBlock?.()}
+        />
+
+        {/* 11. PHYSICS EVENT TIMELINE (BOTTOM RIGHT) */}
+        <PhysicsEventTimeline
+          events={eventsList}
+          onReset={() => simControlsRef.current.resetSim?.(activeExpId)}
+          isPaused={isPaused}
+          onTogglePause={() => {
+            setIsPaused((p) => {
+              const next = !p;
+              simControlsRef.current.setIsPausedRef?.(next);
+              return next;
+            });
           }}
+          onOpenReport={() => setIsReportOpen(true)}
         />
-      )}
-
-      {/* 6B. MISSION MODE PANEL */}
-      {questMode === "missions" && (
-        <QuestMissionPanel
-          experiment={activeExperiment}
-          missions={QUEST_MISSIONS[activeExpId] || []}
-          telemetry={physicsState}
-          physicsState={physicsState}
-          simState={physicsState}
-          onClaimReward={handleClaimMission}
-          completedMissionsMap={questProfile?.completedMissions || {}}
-          onResetSim={() => simControlsRef.current.resetSim?.(activeExpId)}
-          onClose={() => setQuestMode("freeplay")}
-        />
-      )}
-
-      {/* 6C. PREDICTION / HYPOTHESIS PANEL */}
-      {questMode === "prediction" && (
-        <QuestPredictionPanel
-          prediction={QUEST_PREDICTIONS[activeExpId]}
-          experiment={activeExperiment}
-          onRecordPrediction={handleRecordPrediction}
-          completedPrediction={
-            questProfile?.completedPredictions?.[
-              QUEST_PREDICTIONS[activeExpId]?.id
-            ]
-          }
-          onRunExperiment={() => setQuestMode("freeplay")}
-          onClose={() => setQuestMode("freeplay")}
-        />
-      )}
-
-      {/* 7. PHYSICS ACTION CHAIN (TOP CENTER) */}
-      <PhysicsActionChain
-        chainState={actionChain}
-        activeExperimentId={activeExpId}
-      />
-
-      {/* 8. REAL-TIME EXPLANATION BANNER (TOP CENTER) */}
-      <RealTimeExplanation
-        explanation={explanation}
-        formulaTag={formulaTag}
-      />
-
-      {/* 9. LIVE PHYSICS HUD WITH TELEMETRY & GRAPH TABS (RIGHT) */}
-      <LivePhysicsHUD
-        activeExperimentId={activeExpId}
-        activeExperiment={activeExperiment}
-        physicsData={physicsState}
-        mass={mass}
-        onMassChange={setMass}
-        mass2={mass2}
-        onMass2Change={setMass2}
-        springK={springK}
-        onSpringKChange={setSpringK}
-        launchAngle={launchAngle}
-        onLaunchAngleChange={setLaunchAngle}
-        launchSpeed={launchSpeed}
-        onLaunchSpeedChange={setLaunchSpeed}
-        appliedForceManual={appliedForceManual}
-        onAppliedForceManualChange={setAppliedForceManual}
-        collisionType={collisionType}
-        onToggleCollisionType={setCollisionType}
-        onFireProjectile={() => simControlsRef.current.fireProjectile?.()}
-        onTriggerImpact={(f, dt, dir) => simControlsRef.current.triggerImpact?.(f, dt, dir)}
-        onLaunchBall1={() => simControlsRef.current.launchBall1?.()}
-        onResetBall={() => simControlsRef.current.resetSim?.(activeExpId)}
-        isPaused={isPaused}
-        onTogglePause={() => {
-          setIsPaused((p) => {
-            const next = !p;
-            simControlsRef.current.setIsPausedRef?.(next);
-            return next;
-          });
-        }}
-        onOpenReport={() => setIsReportOpen(true)}
-        // Game 1: Force Arena callbacks
-        onThrustCart={(f) => simControlsRef.current.thrustCart?.(f)}
-        onBrakeCart={(f) => simControlsRef.current.brakeCart?.(f)}
-        onStopCart={() => simControlsRef.current.stopCart?.()}
-        // Game 2: Impulse Rush callbacks & params
-        strikeForce={strikeForce}
-        onStrikeForceChange={setStrikeForce}
-        strikeDuration={strikeDuration}
-        onStrikeDurationChange={setStrikeDuration}
-        strikeDirection={strikeDirection}
-        onStrikeDirectionChange={setStrikeDirection}
-        onSoftLandingTest={() => simControlsRef.current.softLandingTest?.()}
-        onCompareImpulses={() => simControlsRef.current.compareImpulses?.()}
-        // Game 3: Collision Chaos callbacks & params
-        v1Init={v1Init}
-        onV1InitChange={setV1Init}
-        v2Init={v2Init}
-        onV2InitChange={setV2Init}
-        onLaunchCollision={(v1, v2) => simControlsRef.current.launchCollision?.(v1, v2)}
-        onReplayCollision={() => simControlsRef.current.replayCollision?.()}
-        // Experiment 6: Pendulum props
-        pendulumLength={pendulumLength}
-        onChangePendulumLength={setPendulumLength}
-        pendulumAngle={pendulumAngle}
-        onChangePendulumAngle={setPendulumAngle}
-        pendulumMass={pendulumMass}
-        onChangePendulumMass={setPendulumMass}
-        // Experiment 7: Electric props
-        charge1Q={charge1Q}
-        onChangeCharge1Q={setCharge1Q}
-        charge2Q={charge2Q}
-        onChangeCharge2Q={setCharge2Q}
-        chargeTestQ={chargeTestQ}
-        onChangeChargeTestQ={setChargeTestQ}
-        onResetCharges={() => simControlsRef.current.resetCharges?.()}
-        // Experiment 8: Wave props
-        waveA1={waveA1}
-        onChangeWaveA1={setWaveA1}
-        waveA2={waveA2}
-        onChangeWaveA2={setWaveA2}
-        wavePhaseDeg={wavePhaseDeg}
-        onChangeWavePhaseDeg={setWavePhaseDeg}
-        waveFreq={waveFreq}
-        onChangeWaveFreq={setWaveFreq}
-        // Experiment 9: Optics props
-        opticsIncidentAngle={opticsIncidentAngle}
-        onChangeOpticsIncidentAngle={setOpticsIncidentAngle}
-        opticsN1={opticsN1}
-        onChangeOpticsN1={setOpticsN1}
-        opticsN2={opticsN2}
-        onChangeOpticsN2={setOpticsN2}
-        onSwapMedia={() => simControlsRef.current.swapOpticsMedia?.()}
-        // Experiment 10: Incline props
-        inclineAngle={inclineAngle}
-        onChangeInclineAngle={setInclineAngle}
-        inclineMass={inclineMass}
-        onChangeInclineMass={setInclineMass}
-        inclineMuStatic={inclineMuStatic}
-        onChangeInclineMuStatic={setInclineMuStatic}
-        inclineMuKinetic={inclineMuKinetic}
-        onChangeInclineMuKinetic={setInclineMuKinetic}
-        onResetInclineBlock={() => simControlsRef.current.resetInclineBlock?.()}
-      />
-
-      {/* 10. LEARN PANEL (BOTTOM LEFT) */}
-      <LearnPanel activeExperimentId={activeExpId} />
-
-      {/* 11. PHYSICS EVENT TIMELINE (BOTTOM RIGHT) */}
-      <PhysicsEventTimeline
-        events={eventsList}
-        onReset={() => simControlsRef.current.resetSim?.(activeExpId)}
-        isPaused={isPaused}
-        onTogglePause={() => {
-          setIsPaused((p) => {
-            const next = !p;
-            simControlsRef.current.setIsPausedRef?.(next);
-            return next;
-          });
-        }}
-        onOpenReport={() => setIsReportOpen(true)}
-      />
+      </aside>
 
       {/* 12. BOTTOM CONTROLS BAR */}
-      <div className="experiment-controls-bar">
+      <div className="experiment-controls-bar" role="toolbar" aria-label="Simulation Controls">
+
         <button
           type="button"
           className={`toggle-chip ${showVectors ? "active" : ""}`}
